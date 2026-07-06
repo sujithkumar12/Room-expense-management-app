@@ -56,6 +56,19 @@ export function RoomPage() {
     if (roomId) loadRoom();
   }, [roomId]);
 
+  useEffect(() => {
+    if (!showForm) return;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [showForm]);
+
+  const closeForm = () => {
+    setShowForm(false);
+    setError('');
+  };
+
   const handleAddExpense = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -110,13 +123,18 @@ export function RoomPage() {
           <Link to={`/rooms/${roomId}/dashboard`} className="btn btn-secondary">
             📊 Dashboard
           </Link>
-          <button type="button" className="btn btn-primary" onClick={() => setShowForm(true)}>
-            + Add Expense
+          <button
+            type="button"
+            className={`btn btn-primary${showForm ? ' btn-active' : ''}`}
+            onClick={() => (showForm ? closeForm() : setShowForm(true))}
+            aria-expanded={showForm}
+          >
+            {showForm ? '✕ Close' : '+ Add Expense'}
           </button>
         </div>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && !showForm && <div className="alert alert-error">{error}</div>}
 
       <div className="stats-grid">
         <div className="stat-card card">
@@ -148,24 +166,68 @@ export function RoomPage() {
       </div>
 
       {showForm && (
-        <div className="card form-card">
-          <h3>Add new expense</h3>
-          <form onSubmit={handleAddExpense} className="expense-form">
-            <div className="form-row">
+        <div
+          className="expense-modal-backdrop"
+          onClick={closeForm}
+          role="presentation"
+        >
+          <div
+            className="expense-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="expense-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="expense-modal-header">
+              <div>
+                <h3 id="expense-modal-title">Add Expense</h3>
+                <p className="expense-modal-hint">
+                  Fill in what you paid. All roommates will see this expense.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={closeForm}
+                aria-label="Close form"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleAddExpense} className="expense-form">
+              {error && showForm && <div className="alert alert-error">{error}</div>}
               <label>
-                Amount (₹)
+                <span className="field-label">Amount (₹)</span>
+                <span className="field-hint">How much did you spend?</span>
                 <input
                   type="number"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder="500"
+                  placeholder="e.g. 500"
                   min="1"
                   step="0.01"
                   required
+                  autoFocus
                 />
               </label>
+
               <label>
-                Date
+                <span className="field-label">Purpose</span>
+                <span className="field-hint">What was this expense for?</span>
+                <input
+                  type="text"
+                  value={purpose}
+                  onChange={(e) => setPurpose(e.target.value)}
+                  placeholder="Groceries, Electricity, WiFi..."
+                  required
+                  maxLength={500}
+                />
+              </label>
+
+              <label>
+                <span className="field-label">Date</span>
+                <span className="field-hint">When did you pay?</span>
                 <input
                   type="date"
                   value={expenseDate}
@@ -173,27 +235,17 @@ export function RoomPage() {
                   required
                 />
               </label>
-            </div>
-            <label>
-              Purpose
-              <input
-                type="text"
-                value={purpose}
-                onChange={(e) => setPurpose(e.target.value)}
-                placeholder="e.g. Groceries, Electricity bill, WiFi"
-                required
-                maxLength={500}
-              />
-            </label>
-            <div className="form-actions">
-              <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? 'Saving...' : 'Save expense'}
-              </button>
-              <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>
-                Cancel
-              </button>
-            </div>
-          </form>
+
+              <div className="form-actions expense-modal-actions">
+                <button type="submit" className="btn btn-primary btn-full" disabled={submitting}>
+                  {submitting ? 'Saving...' : 'Save expense'}
+                </button>
+                <button type="button" className="btn btn-secondary btn-full" onClick={closeForm}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

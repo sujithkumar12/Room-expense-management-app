@@ -15,9 +15,8 @@ export function createPgPool(connectionString: string) {
   return new Pool({
     connectionString: withSupabaseSsl(connectionString),
     ssl: { rejectUnauthorized: false },
-    max: 2,
-    idleTimeoutMillis: 20_000,
-    connectionTimeoutMillis: 5_000,
-    allowExitOnIdle: true,
+    max: 1,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000,
   });
 }

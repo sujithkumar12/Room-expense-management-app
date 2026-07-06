@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelResponse } from '@vercel/node';
 
 export function json(res: VercelResponse, status: number, data: unknown) {
   return res.status(status).json(data);
