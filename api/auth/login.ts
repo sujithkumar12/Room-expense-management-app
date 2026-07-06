@@ -1,8 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import bcrypt from 'bcryptjs';
-import { sql } from '@vercel/postgres';
 import { signToken } from '../_lib/auth.js';
-import { ensureSchema } from '../_lib/db.js';
+import { query } from '../_lib/db.js';
 import { handleError, json } from '../_lib/utils.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -11,8 +10,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    await ensureSchema();
-
     const { email, password } = req.body || {};
 
     if (!email?.trim() || !password) {
@@ -20,9 +17,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const result = await sql`
-      SELECT id, name, email, password_hash FROM users WHERE email = ${normalizedEmail}
-    `;
+    const result = await query(
+      'SELECT id, name, email, password_hash FROM users WHERE email = $1',
+      [normalizedEmail]
+    );
 
     if (result.rows.length === 0) {
       return json(res, 401, { error: 'Invalid email or password' });

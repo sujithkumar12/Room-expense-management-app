@@ -1,6 +1,6 @@
 # RoomSplit — Room Expense Management App
 
-Split shared expenses with roommates. Built with **Vite + React**, **Vercel Serverless API**, and **PostgreSQL** (Vercel Postgres / Neon).
+Split shared expenses with roommates. Built with **Vite + React**, **Vercel Serverless API**, and **Supabase PostgreSQL**.
 
 ## Features
 
@@ -16,7 +16,7 @@ Split shared expenses with roommates. Built with **Vite + React**, **Vercel Serv
 |----------|-------------------------------------|
 | Frontend | Vite, React, TypeScript, Recharts   |
 | Backend  | Vercel Serverless Functions         |
-| Database | PostgreSQL via `@vercel/postgres`   |
+| Database | PostgreSQL (Supabase) via `pg`           |
 | Auth     | bcrypt + JWT                        |
 
 ## Local Development
@@ -29,18 +29,26 @@ npm install
 
 ### 2. Set up environment variables
 
-Copy `.env.example` to `.env.local` and fill in values:
+Copy `.env.example` to `.env.local` and add your **Supabase** credentials from:
+**Supabase Dashboard → Project Settings → Database**
+
+Required variables:
+
+| Variable | Description |
+|----------|-------------|
+| `POSTGRES_URL` | Pooled connection (port 6543) |
+| `POSTGRES_URL_NON_POOLING` | Direct connection (port 5432) — used for schema setup |
+| `JWT_SECRET` | Long random string for app auth tokens |
+
+### 3. Initialize database tables
 
 ```bash
-cp .env.example .env.local
+npm run db:init
 ```
 
-You need a Postgres database. Options:
+Tables are also created automatically on the first API request.
 
-- **Vercel Postgres (Neon)** — Create in [Vercel Dashboard](https://vercel.com/dashboard) → Storage → Create Database
-- **Local Postgres** — Use any Postgres URL in `POSTGRES_URL`
-
-### 3. Run the app
+### 4. Run the app
 
 For full-stack local dev (API + frontend):
 
@@ -64,10 +72,13 @@ Open [http://localhost:5173](http://localhost:5173).
 
 1. Push this project to GitHub
 2. Import in [Vercel](https://vercel.com/new)
-3. Add **Postgres** storage from the Vercel dashboard (Storage → Create → Postgres)
-4. Set environment variable:
-   - `JWT_SECRET` — a long random string (e.g. `openssl rand -base64 32`)
-5. Deploy — tables are created automatically on first API request
+3. In **Vercel → Settings → Environment Variables**, add from Supabase:
+   - `POSTGRES_URL`
+   - `POSTGRES_URL_NON_POOLING`
+   - `POSTGRES_PRISMA_URL` (optional)
+   - `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DATABASE` (optional)
+   - `JWT_SECRET` — a long random string
+4. Deploy — tables are created automatically on first API request
 
 ## Database Schema
 

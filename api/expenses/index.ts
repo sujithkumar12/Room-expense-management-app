@@ -1,12 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '@vercel/postgres';
 import { requireAuth } from '../_lib/auth.js';
-import { ensureSchema } from '../_lib/db.js';
+import { query } from '../_lib/db.js';
 import { handleError, json } from '../_lib/utils.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    await ensureSchema();
     const authUser = requireAuth(req);
 
     if (req.method === 'GET') {
@@ -16,22 +14,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return json(res, 400, { error: 'Valid roomId is required' });
       }
 
-      const memberCheck = await sql`
-        SELECT 1 FROM room_members WHERE room_id = ${roomId} AND user_id = ${authUser.userId}
-      `;
+      const memberCheck = await query(
+        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+        [roomId, authUser.userId]
+      );
 
       if (memberCheck.rows.length === 0) {
         return json(res, 403, { error: 'You are not a member of this room' });
       }
 
-      const result = await sql`
-        SELECT e.id, e.amount::float AS amount, e.purpose, e.expense_date, e.created_at,
-               u.id AS user_id, u.name AS user_name
-        FROM expenses e
-        INNER JOIN users u ON u.id = e.user_id
-        WHERE e.room_id = ${roomId}
-        ORDER BY e.expense_date DESC, e.created_at DESC
-      `;
+      const result = await query(
+        `SELECT e.id, e.amount::float AS amount, e.purpose, e.expense_date, e.created_at,
+                u.id AS user_id, u.name AS user_name
+         FROM expenses e
+         INNER JOIN users u ON u.id = e.user_id
+         WHERE e.room_id = $1
+         ORDER BY e.expense_date DESC, e.created_at DESC
+         LIMIT 100`,
+        [roomId]
+      );
 
       return json(res, 200, { expenses: result.rows });
     }
@@ -48,21 +49,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return json(res, 400, { error: 'Amount must be a positive number' });
       }
 
-      const memberCheck = await sql`
-        SELECT 1 FROM room_members WHERE room_id = ${roomId} AND user_id = ${authUser.userId}
-      `;
+      const result = await query(
+        `INSERT INTO expenses (room_id, user_id, amount, purpose, expense_date)
+         SELECT $1, $2, $3, $4, $5
+         WHERE EXISTS (
+           SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2
+         )
+         RETURNING id, amount::float AS amount, purpose, expense_date, created_at`,
+        [
+          roomId,
+          authUser.userId,
+          parsedAmount,
+          purpose.trim(),
+          expenseDate || new Date().toISOString().split('T')[0],
+        ]
+      );
 
-      if (memberCheck.rows.length === 0) {
+      if (result.rows.length === 0) {
         return json(res, 403, { error: 'You are not a member of this room' });
       }
-
-      const date = expenseDate || new Date().toISOString().split('T')[0];
-
-      const result = await sql`
-        INSERT INTO expenses (room_id, user_id, amount, purpose, expense_date)
-        VALUES (${roomId}, ${authUser.userId}, ${parsedAmount}, ${purpose.trim()}, ${date})
-        RETURNING id, amount::float AS amount, purpose, expense_date, created_at
-      `;
 
       return json(res, 201, { expense: result.rows[0] });
     }

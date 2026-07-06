@@ -32,4 +32,7 @@ CREATE TABLE IF NOT EXISTS expenses (
 );
 
 CREATE INDEX IF NOT EXISTS idx_expenses_room_date ON expenses(room_id, expense_date);
+CREATE INDEX IF NOT EXISTS idx_expenses_room_user ON expenses(room_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_room_members_room ON room_members(room_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);

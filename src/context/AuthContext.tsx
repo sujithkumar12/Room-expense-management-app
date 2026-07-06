@@ -2,7 +2,6 @@ import {
   createContext,
   useContext,
   useState,
-  useEffect,
   type ReactNode,
 } from 'react';
 import { api, getStoredUser, setAuth, clearAuth, getToken } from '../api/client';
@@ -18,17 +17,13 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+function readStoredUser(): User | null {
+  const stored = getStoredUser();
+  return stored && getToken() ? stored : null;
+}
 
-  useEffect(() => {
-    const stored = getStoredUser();
-    if (stored && getToken()) {
-      setUser(stored);
-    }
-    setLoading(false);
-  }, []);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<User | null>(readStoredUser);
 
   const login = async (email: string, password: string) => {
     const { token, user: loggedInUser } = await api.login({ email, password });
@@ -48,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, loading: false, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );

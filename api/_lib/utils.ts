@@ -7,7 +7,13 @@ export function json(res: VercelResponse, status: number, data: unknown) {
 export function handleError(res: VercelResponse, error: unknown) {
   const err = error as Error & { status?: number };
   const status = err.status || 500;
-  const message = status === 500 ? 'Internal server error' : err.message;
+  const isDev = process.env.NODE_ENV !== 'production';
+  const message =
+    status === 500
+      ? isDev && err.message
+        ? err.message
+        : 'Internal server error'
+      : err.message;
   console.error(error);
   return json(res, status, { error: message });
 }

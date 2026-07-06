@@ -1,47 +1,42 @@
-import { sql } from '@vercel/postgres';
+import { config } from 'dotenv';
+import { existsSync } from 'fs';
+import { resolve } from 'path';
+import pg from 'pg';
+import { createPgPool } from './pg-config.js';
 
-let initialized = false;
+let envLoaded = false;
 
-export async function ensureSchema() {
-  if (initialized) return;
+function loadEnvOnce() {
+  if (envLoaded || process.env.POSTGRES_URL) {
+    envLoaded = true;
+    return;
+  }
+  const envLocal = resolve(process.cwd(), '.env.local');
+  if (existsSync(envLocal)) {
+    config({ path: envLocal });
+  }
+  envLoaded = true;
+}
 
-  await sql`
-    CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      email VARCHAR(255) UNIQUE NOT NULL,
-      password_hash VARCHAR(255) NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `;
-  await sql`
-    CREATE TABLE IF NOT EXISTS rooms (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      invite_code VARCHAR(8) UNIQUE NOT NULL,
-      created_by INTEGER REFERENCES users(id),
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `;
-  await sql`
-    CREATE TABLE IF NOT EXISTS room_members (
-      room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
-      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      joined_at TIMESTAMPTZ DEFAULT NOW(),
-      PRIMARY KEY (room_id, user_id)
-    )
-  `;
-  await sql`
-    CREATE TABLE IF NOT EXISTS expenses (
-      id SERIAL PRIMARY KEY,
-      room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
-      user_id INTEGER REFERENCES users(id),
-      amount DECIMAL(10, 2) NOT NULL CHECK (amount > 0),
-      purpose VARCHAR(500) NOT NULL,
-      expense_date DATE DEFAULT CURRENT_DATE,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `;
+let pool: pg.Pool | null = null;
 
-  initialized = true;
+function getPool() {
+  loadEnvOnce();
+
+  if (!pool) {
+    const connectionString = process.env.POSTGRES_URL;
+    if (!connectionString) {
+      throw new Error('POSTGRES_URL is not configured');
+    }
+    pool = createPgPool(connectionString);
+  }
+
+  return pool;
+}
+
+export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
+  text: string,
+  params: unknown[] = []
+) {
+  return getPool().query<T>(text, params);
 }

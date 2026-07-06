@@ -1,23 +1,22 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '@vercel/postgres';
 import { requireAuth } from '../_lib/auth.js';
-import { ensureSchema } from '../_lib/db.js';
+import { query } from '../_lib/db.js';
 import { generateInviteCode, handleError, json } from '../_lib/utils.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    await ensureSchema();
     const authUser = requireAuth(req);
 
     if (req.method === 'GET') {
-      const result = await sql`
-        SELECT r.id, r.name, r.invite_code, r.created_at,
-               (SELECT COUNT(*)::int FROM room_members rm WHERE rm.room_id = r.id) AS member_count
-        FROM rooms r
-        INNER JOIN room_members rm ON rm.room_id = r.id
-        WHERE rm.user_id = ${authUser.userId}
-        ORDER BY r.created_at DESC
-      `;
+      const result = await query(
+        `SELECT r.id, r.name, r.invite_code, r.created_at,
+                (SELECT COUNT(*)::int FROM room_members rm WHERE rm.room_id = r.id) AS member_count
+         FROM rooms r
+         INNER JOIN room_members rm ON rm.room_id = r.id
+         WHERE rm.user_id = $1
+         ORDER BY r.created_at DESC`,
+        [authUser.userId]
+      );
 
       return json(res, 200, { rooms: result.rows });
     }
@@ -33,24 +32,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let attempts = 0;
 
       while (attempts < 5) {
-        const existing = await sql`SELECT id FROM rooms WHERE invite_code = ${inviteCode}`;
+        const existing = await query('SELECT id FROM rooms WHERE invite_code = $1', [inviteCode]);
         if (existing.rows.length === 0) break;
         inviteCode = generateInviteCode();
         attempts++;
       }
 
-      const roomResult = await sql`
-        INSERT INTO rooms (name, invite_code, created_by)
-        VALUES (${name.trim()}, ${inviteCode}, ${authUser.userId})
-        RETURNING id, name, invite_code, created_at
-      `;
-
-      const room = roomResult.rows[0] as { id: number };
-
-      await sql`
-        INSERT INTO room_members (room_id, user_id)
-        VALUES (${room.id}, ${authUser.userId})
-      `;
+      const roomResult = await query(
+        `WITH new_room AS (
+           INSERT INTO rooms (name, invite_code, created_by)
+           VALUES ($1, $2, $3)
+           RETURNING id, name, invite_code, created_at
+         ),
+         insert_member AS (
+           INSERT INTO room_members (room_id, user_id)
+           SELECT id, $3 FROM new_room
+         )
+         SELECT id, name, invite_code, created_at FROM new_room`,
+        [name.trim(), inviteCode, authUser.userId]
+      );
 
       return json(res, 201, { room: roomResult.rows[0] });
     }

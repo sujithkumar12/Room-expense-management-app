@@ -1,9 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import bcrypt from 'bcryptjs';
-import { sql } from '@vercel/postgres';
 import { signToken } from '../_lib/auth.js';
-import { ensureSchema } from '../_lib/db.js';
+import { query } from '../_lib/db.js';
 import { handleError, json } from '../_lib/utils.js';
+
+const BCRYPT_ROUNDS = 8;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -11,8 +12,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    await ensureSchema();
-
     const { name, email, password } = req.body || {};
 
     if (!name?.trim() || !email?.trim() || !password) {
@@ -24,18 +23,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const existing = await sql`SELECT id FROM users WHERE email = ${normalizedEmail}`;
+    const existing = await query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
 
     if (existing.rows.length > 0) {
       return json(res, 409, { error: 'Email already registered' });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
-    const result = await sql`
-      INSERT INTO users (name, email, password_hash)
-      VALUES (${name.trim()}, ${normalizedEmail}, ${passwordHash})
-      RETURNING id, name, email
-    `;
+    const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
+    const result = await query(
+      `INSERT INTO users (name, email, password_hash)
+       VALUES ($1, $2, $3)
+       RETURNING id, name, email`,
+      [name.trim(), normalizedEmail, passwordHash]
+    );
 
     const user = result.rows[0] as { id: number; name: string; email: string };
     const token = signToken(user.id, user.email);

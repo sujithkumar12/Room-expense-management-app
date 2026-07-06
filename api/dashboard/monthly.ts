@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { sql } from '@vercel/postgres';
 import { requireAuth } from '../_lib/auth.js';
-import { ensureSchema } from '../_lib/db.js';
+import { query } from '../_lib/db.js';
 import { handleError, json } from '../_lib/utils.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -10,7 +9,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    await ensureSchema();
     const authUser = requireAuth(req);
     const roomId = Number(req.query.roomId);
     const year = Number(req.query.year) || new Date().getFullYear();
@@ -19,35 +17,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return json(res, 400, { error: 'Valid roomId is required' });
     }
 
-    const memberCheck = await sql`
-      SELECT 1 FROM room_members WHERE room_id = ${roomId} AND user_id = ${authUser.userId}
-    `;
+    const memberCheck = await query(
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      [roomId, authUser.userId]
+    );
 
     if (memberCheck.rows.length === 0) {
       return json(res, 403, { error: 'You are not a member of this room' });
     }
 
-    const monthlyResult = await sql`
-      SELECT
-        EXTRACT(MONTH FROM expense_date)::int AS month,
-        SUM(amount)::float AS total
-      FROM expenses
-      WHERE room_id = ${roomId}
-        AND EXTRACT(YEAR FROM expense_date) = ${year}
-      GROUP BY EXTRACT(MONTH FROM expense_date)
-      ORDER BY month
-    `;
-
-    const byMemberResult = await sql`
-      SELECT u.name,
-             SUM(e.amount)::float AS total
-      FROM expenses e
-      INNER JOIN users u ON u.id = e.user_id
-      WHERE e.room_id = ${roomId}
-        AND EXTRACT(YEAR FROM e.expense_date) = ${year}
-      GROUP BY u.id, u.name
-      ORDER BY total DESC
-    `;
+    const [monthlyResult, byMemberResult] = await Promise.all([
+      query(
+        `SELECT
+           EXTRACT(MONTH FROM expense_date)::int AS month,
+           SUM(amount)::float AS total
+         FROM expenses
+         WHERE room_id = $1
+           AND EXTRACT(YEAR FROM expense_date) = $2
+         GROUP BY EXTRACT(MONTH FROM expense_date)
+         ORDER BY month`,
+        [roomId, year]
+      ),
+      query(
+        `SELECT u.name,
+                SUM(e.amount)::float AS total
+         FROM expenses e
+         INNER JOIN users u ON u.id = e.user_id
+         WHERE e.room_id = $1
+           AND EXTRACT(YEAR FROM e.expense_date) = $2
+         GROUP BY u.id, u.name
+         ORDER BY total DESC`,
+        [roomId, year]
+      ),
+    ]);
 
     const monthNames = [
       'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',

@@ -1,0 +1,23 @@
+import pg from 'pg';
+
+const { Pool } = pg;
+
+/** Supabase + pg v8: sslmode=require needs uselibpqcompat for rejectUnauthorized: false */
+export function withSupabaseSsl(connectionString: string) {
+  if (connectionString.includes('uselibpqcompat=')) {
+    return connectionString;
+  }
+  const separator = connectionString.includes('?') ? '&' : '?';
+  return `${connectionString}${separator}uselibpqcompat=true`;
+}
+
+export function createPgPool(connectionString: string) {
+  return new Pool({
+    connectionString: withSupabaseSsl(connectionString),
+    ssl: { rejectUnauthorized: false },
+    max: 2,
+    idleTimeoutMillis: 20_000,
+    connectionTimeoutMillis: 5_000,
+    allowExitOnIdle: true,
+  });
+}
