@@ -1116,7 +1116,7 @@ select:focus {
   }
 
   .page-actions {
-    flex-direction: column;
+    /* flex-direction: column; */
     width: 100%;
   }
 
