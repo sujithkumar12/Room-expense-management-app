@@ -9,6 +9,9 @@ export interface Room {
   name: string;
   invite_code: string;
   created_at: string;
+  created_by?: number;
+  weekly_limit?: number | null;
+  is_admin?: boolean;
   member_count?: number;
 }
 
@@ -31,9 +34,12 @@ export interface Expense {
 }
 
 export interface RoomSummary {
-  totalExpense: number;
+  monthlyExpense: number;
+  weeklyExpense: number;
+  weeklyLimit: number | null;
   memberCount: number;
   equalShare: number;
+  monthLabel: string;
 }
 
 export interface MonthlyData {

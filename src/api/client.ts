@@ -83,6 +83,12 @@ export const api = {
       summary: RoomSummary;
     }>(`/rooms/${id}`),
 
+  setWeeklyLimit: (roomId: number, weeklyLimit: number | null) =>
+    request<{ room: Room }>(`/rooms/${roomId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ weeklyLimit }),
+    }),
+
   addExpense: (body: {
     roomId: number;
     amount: number;
@@ -92,6 +98,20 @@ export const api = {
     request<{ expense: Expense }>('/expenses', {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  updateExpense: (
+    expenseId: number,
+    body: { amount: number; purpose: string; expenseDate?: string }
+  ) =>
+    request<{ expense: Expense }>(`/expenses/${expenseId}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  deleteExpense: (expenseId: number) =>
+    request<{ success: boolean }>(`/expenses/${expenseId}`, {
+      method: 'DELETE',
     }),
 
   getDashboard: (roomId: number, year?: number) => {

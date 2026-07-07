@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS rooms (
   name VARCHAR(255) NOT NULL,
   invite_code VARCHAR(8) UNIQUE NOT NULL,
   created_by INTEGER REFERENCES users(id),
+  weekly_limit DECIMAL(10, 2),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
