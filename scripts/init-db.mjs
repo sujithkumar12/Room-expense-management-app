@@ -54,6 +54,7 @@ try {
       name VARCHAR(255) NOT NULL,
       invite_code VARCHAR(8) UNIQUE NOT NULL,
       created_by INTEGER REFERENCES users(id),
+      weekly_limit DECIMAL(10, 2),
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`,
     `CREATE TABLE IF NOT EXISTS room_members (
@@ -78,6 +79,7 @@ try {
   }
 
   const indexes = [
+    'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS weekly_limit DECIMAL(10, 2)',
     'CREATE INDEX IF NOT EXISTS idx_expenses_room_date ON expenses(room_id, expense_date)',
     'CREATE INDEX IF NOT EXISTS idx_expenses_room_user ON expenses(room_id, user_id)',
     'CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id)',
