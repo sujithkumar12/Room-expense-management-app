@@ -52,11 +52,17 @@ a:hover {
 
 #root {
   min-height: 100vh;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* Layout */
 .app-shell {
   min-height: 100vh;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -132,9 +138,11 @@ a:hover {
   flex: 1;
   max-width: 1100px;
   width: 100%;
+  min-width: 0;
   margin: 0 auto;
   padding: clamp(1rem, 3vw, 2rem) var(--page-padding);
   padding-bottom: max(clamp(1rem, 3vw, 2rem), env(safe-area-inset-bottom));
+  overflow-x: hidden;
 }
 
 /* Auth */
@@ -304,7 +312,9 @@ select:focus {
   border-radius: var(--radius);
   padding: clamp(1rem, 3vw, 1.25rem);
   box-shadow: var(--shadow);
-  height: fit-content;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 /* Page */
@@ -315,6 +325,8 @@ select:focus {
   gap: 1rem;
   margin-bottom: 1.5rem;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .page-header h1 {
@@ -361,6 +373,12 @@ select:focus {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
   gap: 1rem;
   margin-bottom: 1.5rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.stats-grid > * {
+  min-width: 0;
 }
 
 .stats-grid-4 {
@@ -530,6 +548,12 @@ select:focus {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.room-grid > * {
+  min-width: 0;
 }
 
 .room-card {
@@ -607,7 +631,12 @@ select:focus {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
-  overflow: auto;
+  width: 100%;
+  min-width: 0;
+}
+
+.two-col > * {
+  min-width: 0;
 }
 
 .expense-form {
@@ -777,11 +806,14 @@ select:focus {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .member-info strong {
   display: block;
   font-size: 0.9375rem;
+  overflow-wrap: anywhere;
 }
 
 .member-info .text-muted {
@@ -822,12 +854,17 @@ select:focus {
 .expense-tabs {
   display: flex;
   gap: 0.5rem;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   padding-bottom: 0.75rem;
   margin-bottom: 0.75rem;
   border-bottom: 1px solid var(--border);
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  overscroll-behavior-x: contain;
 }
 
 .expense-tabs::-webkit-scrollbar {
@@ -910,6 +947,7 @@ select:focus {
 .expense-info strong {
   display: block;
   font-size: 0.9375rem;
+  overflow-wrap: anywhere;
 }
 
 .expense-amount {
@@ -924,6 +962,12 @@ select:focus {
   grid-template-columns: 1fr;
   gap: 1rem;
   margin-bottom: 1.5rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.charts-grid > * {
+  min-width: 0;
 }
 
 .chart-card {
@@ -948,13 +992,19 @@ select:focus {
 
 /* Table */
 .table-wrap {
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 
 .data-table {
   width: 100%;
+  min-width: 0;
   border-collapse: collapse;
   font-size: 0.875rem;
+  table-layout: fixed;
 }
 
 .data-table th,
@@ -962,6 +1012,8 @@ select:focus {
   text-align: left;
   padding: 0.625rem 0.75rem;
   border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .data-table th {
@@ -1027,6 +1079,7 @@ select:focus {
   .page-header {
     flex-direction: column;
     align-items: stretch;
+    min-width: 0;
   }
 
   .page-actions {
@@ -1036,6 +1089,14 @@ select:focus {
   .page-actions .btn {
     flex: 1;
     min-width: 0;
+  }
+
+  /* Edge-to-edge tab scroll inside card only */
+  .card .expense-tabs {
+    margin-left: calc(-1 * clamp(1rem, 3vw, 1.25rem));
+    margin-right: calc(-1 * clamp(1rem, 3vw, 1.25rem));
+    padding-left: clamp(1rem, 3vw, 1.25rem);
+    padding-right: clamp(1rem, 3vw, 1.25rem);
   }
 }
 
@@ -1133,7 +1194,6 @@ select:focus {
 @media (min-width: 768px) {
   .two-col {
     grid-template-columns: 1fr 1.5fr;
-    overflow: auto;
   }
 
   .form-row {
