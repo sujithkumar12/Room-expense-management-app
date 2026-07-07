@@ -1131,6 +1131,7 @@ select:focus {
 @media (min-width: 768px) {
   .two-col {
     grid-template-columns: 1fr 1.5fr;
+    overflow: auto;
   }
 
   .form-row {
