@@ -20,7 +20,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Link>
         </nav>
         <div className="header-user">
-          <span className="user-name">{user?.name}</span>
+          <span className="user-name" title={user?.name}>{user?.name}</span>
           <button type="button" className="btn btn-ghost btn-sm" onClick={logout}>
             Log out
           </button>

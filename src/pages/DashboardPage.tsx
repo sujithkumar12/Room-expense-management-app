@@ -93,18 +93,20 @@ export function DashboardPage() {
               {monthlyWithData.length === 0 ? (
                 <p className="text-muted empty-text">No expenses recorded for {year}</p>
               ) : (
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={data.monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                    <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${v}`} />
-                    <Tooltip
-                      formatter={(value) => [formatCurrency(Number(value ?? 0)), 'Total']}
-                      contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
-                    />
-                    <Bar dataKey="total" fill="#6366f1" radius={[6, 6, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div className="chart-container">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={data.monthly} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v}`} width={48} />
+                      <Tooltip
+                        formatter={(value) => [formatCurrency(Number(value ?? 0)), 'Total']}
+                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
+                      />
+                      <Bar dataKey="total" fill="#6366f1" radius={[6, 6, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               )}
             </div>
 
@@ -113,27 +115,29 @@ export function DashboardPage() {
               {memberData.length === 0 ? (
                 <p className="text-muted empty-text">No expenses by members yet</p>
               ) : (
-                <ResponsiveContainer width="100%" height={320}>
-                  <PieChart>
-                    <Pie
-                      data={memberData}
-                      dataKey="total"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={100}
-                      label={({ name, percent }) =>
-                        `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`
-                      }
-                    >
-                      {memberData.map((_, index) => (
-                        <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div className="chart-container">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={memberData}
+                        dataKey="total"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius="70%"
+                        label={({ name, percent }) =>
+                          `${name ?? ''} ${((percent ?? 0) * 100).toFixed(0)}%`
+                        }
+                      >
+                        {memberData.map((_, index) => (
+                          <Cell key={index} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} />
+                      <Legend wrapperStyle={{ fontSize: '0.8125rem' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               )}
             </div>
           </div>
