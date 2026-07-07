@@ -43,6 +43,7 @@ export function RoomPage() {
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split('T')[0]);
   const [weeklyLimitInput, setWeeklyLimitInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [expenseFilter, setExpenseFilter] = useState<'all' | number>('all');
 
   const loadRoom = async () => {
     try {
@@ -64,6 +65,15 @@ export function RoomPage() {
   useEffect(() => {
     if (roomId) loadRoom();
   }, [roomId]);
+
+  useEffect(() => {
+    if (
+      expenseFilter !== 'all' &&
+      !expenses.some((e) => e.user_id === expenseFilter)
+    ) {
+      setExpenseFilter('all');
+    }
+  }, [expenses, expenseFilter]);
 
   useEffect(() => {
     const modalOpen = showForm || showLimitForm || expenseToDelete;
@@ -202,6 +212,21 @@ export function RoomPage() {
   const weeklyOver = summary.weeklyLimit
     ? summary.weeklyExpense > summary.weeklyLimit
     : false;
+
+  const filteredExpenses =
+    expenseFilter === 'all'
+      ? expenses
+      : expenses.filter((e) => e.user_id === expenseFilter);
+
+  const expenseCountByMember = (memberId: number) =>
+    expenses.filter((e) => e.user_id === memberId).length;
+
+  const adminId = room.created_by;
+  const tabMembers = [...members].sort((a, b) => {
+    if (a.id === adminId) return -1;
+    if (b.id === adminId) return 1;
+    return a.name.localeCompare(b.name);
+  });
 
   return (
     <Layout>
@@ -485,11 +510,47 @@ export function RoomPage() {
 
         <section className="card">
           <h2>This Month&apos;s Expenses</h2>
+
+          {expenses.length > 0 && (
+            <div className="expense-tabs" role="tablist" aria-label="Filter expenses by member">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={expenseFilter === 'all'}
+                className={`expense-tab${expenseFilter === 'all' ? ' active' : ''}`}
+                onClick={() => setExpenseFilter('all')}
+              >
+                All
+                <span className="tab-count">{expenses.length}</span>
+              </button>
+              {tabMembers.map((member) => {
+                const isAdmin = member.id === adminId;
+                const isYou = member.id === user?.id;
+                return (
+                <button
+                  key={member.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={expenseFilter === member.id}
+                  className={`expense-tab${expenseFilter === member.id ? ' active' : ''}`}
+                  onClick={() => setExpenseFilter(member.id)}
+                >
+                  {member.name.split(' ')[0]}
+                  {/* {isAdmin ? ' · Admin' : isYou ? ' · You' : ''} */}
+                  <span className="tab-count">{expenseCountByMember(member.id)}</span>
+                </button>
+                );
+              })}
+            </div>
+          )}
+
           {expenses.length === 0 ? (
             <p className="text-muted empty-text">No expenses this month. Add the first one!</p>
+          ) : filteredExpenses.length === 0 ? (
+            <p className="text-muted empty-text">No expenses for this member this month.</p>
           ) : (
             <div className="expense-list">
-              {expenses.map((expense) => (
+              {filteredExpenses.map((expense) => (
                 <div key={expense.id} className="expense-row">
                   <div className="expense-info">
                     <strong>{expense.purpose}</strong>
