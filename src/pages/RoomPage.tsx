@@ -524,8 +524,8 @@ export function RoomPage() {
                 <span className="tab-count">{expenses.length}</span>
               </button>
               {tabMembers.map((member) => {
-                const isAdmin = member.id === adminId;
-                const isYou = member.id === user?.id;
+                // const isAdmin = member.id === adminId;
+                // const isYou = member.id === user?.id;
                 return (
                 <button
                   key={member.id}
