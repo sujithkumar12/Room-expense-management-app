@@ -304,6 +304,7 @@ select:focus {
   border-radius: var(--radius);
   padding: clamp(1rem, 3vw, 1.25rem);
   box-shadow: var(--shadow);
+  height: fit-content;
 }
 
 /* Page */
