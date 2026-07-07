@@ -606,6 +606,7 @@ select:focus {
   display: grid;
   grid-template-columns: 1fr;
   gap: 1rem;
+  overflow: auto;
 }
 
 .expense-form {
