@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { ToastProvider } from './context/ToastContext';
+import { ThemeProvider } from './context/ThemeContext';
 import { ProtectedRoute, PublicRoute } from './components/ProtectedRoute';
 
 const LoginPage = lazy(() =>
@@ -8,6 +10,12 @@ const LoginPage = lazy(() =>
 );
 const SignupPage = lazy(() =>
   import('./pages/SignupPage').then((m) => ({ default: m.SignupPage }))
+);
+const ForgotPasswordPage = lazy(() =>
+  import('./pages/ForgotPasswordPage').then((m) => ({ default: m.ForgotPasswordPage }))
+);
+const ResetPasswordPage = lazy(() =>
+  import('./pages/ResetPasswordPage').then((m) => ({ default: m.ResetPasswordPage }))
 );
 const RoomsPage = lazy(() =>
   import('./pages/RoomsPage').then((m) => ({ default: m.RoomsPage }))
@@ -29,27 +37,33 @@ function PageLoader() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path="/" element={<Navigate to="/rooms" replace />} />
+    <ThemeProvider>
+      <ToastProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<Navigate to="/rooms" replace />} />
 
-            <Route element={<PublicRoute />}>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/signup" element={<SignupPage />} />
-            </Route>
+                <Route element={<PublicRoute />}>
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/signup" element={<SignupPage />} />
+                  <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                  <Route path="/reset-password" element={<ResetPasswordPage />} />
+                </Route>
 
-            <Route element={<ProtectedRoute />}>
-              <Route path="/rooms" element={<RoomsPage />} />
-              <Route path="/rooms/:id" element={<RoomPage />} />
-              <Route path="/rooms/:id/dashboard" element={<DashboardPage />} />
-            </Route>
+                <Route element={<ProtectedRoute />}>
+                  <Route path="/rooms" element={<RoomsPage />} />
+                  <Route path="/rooms/:id" element={<RoomPage />} />
+                  <Route path="/rooms/:id/dashboard" element={<DashboardPage />} />
+                </Route>
 
-            <Route path="*" element={<Navigate to="/rooms" replace />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
-    </AuthProvider>
+                <Route path="*" element={<Navigate to="/rooms" replace />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </AuthProvider>
+      </ToastProvider>
+    </ThemeProvider>
   );
 }

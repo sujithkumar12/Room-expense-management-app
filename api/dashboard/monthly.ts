@@ -26,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return json(res, 403, { error: 'You are not a member of this room' });
     }
 
-    const [monthlyResult, byMemberResult] = await Promise.all([
+    const [monthlyResult, byMemberResult, yearsResult, prevYearResult] = await Promise.all([
       query(
         `SELECT
            EXTRACT(MONTH FROM expense_date)::int AS month,
@@ -49,6 +49,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          ORDER BY total DESC`,
         [roomId, year]
       ),
+      query<{ year: number }>(
+        `SELECT DISTINCT EXTRACT(YEAR FROM expense_date)::int AS year
+         FROM expenses
+         WHERE room_id = $1
+         ORDER BY year DESC`,
+        [roomId]
+      ),
+      query<{ total: number }>(
+        `SELECT COALESCE(SUM(amount), 0)::float AS total
+         FROM expenses
+         WHERE room_id = $1
+           AND EXTRACT(YEAR FROM expense_date) = $2`,
+        [roomId, year - 1]
+      ),
     ]);
 
     const monthNames = [
@@ -70,12 +84,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }));
 
     const yearTotal = monthly.reduce((sum, m) => sum + m.total, 0);
+    const previousYearTotal = prevYearResult.rows[0]?.total ?? 0;
+
+    const currentYear = new Date().getFullYear();
+    const yearSet = new Set(yearsResult.rows.map((r) => r.year));
+    yearSet.add(currentYear);
+    const availableYears = Array.from(yearSet).sort((a, b) => b - a);
+
+    let yearChangePercent: number | null = null;
+    if (previousYearTotal > 0) {
+      yearChangePercent = ((yearTotal - previousYearTotal) / previousYearTotal) * 100;
+    } else if (yearTotal > 0) {
+      yearChangePercent = 100;
+    }
 
     return json(res, 200, {
       year,
       monthly,
       byMember: byMemberResult.rows,
       yearTotal,
+      previousYearTotal,
+      yearChangePercent,
+      availableYears,
     });
   } catch (error) {
     return handleError(res, error);

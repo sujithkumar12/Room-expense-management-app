@@ -32,8 +32,31 @@ CREATE TABLE IF NOT EXISTS expenses (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS settlements (
+  id SERIAL PRIMARY KEY,
+  room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+  payer_id INTEGER REFERENCES users(id),
+  payee_id INTEGER REFERENCES users(id),
+  amount DECIMAL(10, 2) NOT NULL CHECK (amount > 0),
+  note VARCHAR(500),
+  settlement_year INTEGER NOT NULL,
+  settlement_month INTEGER NOT NULL CHECK (settlement_month BETWEEN 1 AND 12),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  token_hash VARCHAR(255) NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_expenses_room_date ON expenses(room_id, expense_date);
 CREATE INDEX IF NOT EXISTS idx_expenses_room_user ON expenses(room_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_room_members_user ON room_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_room_members_room ON room_members(room_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_settlements_room_period ON settlements(room_id, settlement_year, settlement_month);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash);

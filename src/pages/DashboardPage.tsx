@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   BarChart,
   Bar,
@@ -27,8 +27,15 @@ function formatCurrency(amount: number) {
   }).format(amount);
 }
 
+function formatChange(percent: number | null) {
+  if (percent === null) return null;
+  const arrow = percent >= 0 ? '↑' : '↓';
+  return `${arrow} ${Math.abs(percent).toFixed(0)}%`;
+}
+
 export function DashboardPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const roomId = Number(id);
   const currentYear = new Date().getFullYear();
 
@@ -55,6 +62,16 @@ export function DashboardPage() {
 
   const monthlyWithData = data?.monthly.filter((m) => m.total > 0) ?? [];
   const memberData = data?.byMember ?? [];
+  const availableYears = data?.availableYears?.length
+    ? data.availableYears
+    : [currentYear, currentYear - 1, currentYear - 2];
+  const yearChange = formatChange(data?.yearChangePercent ?? null);
+
+  const handleBarClick = (monthNum: number, total: number) => {
+    if (total > 0) {
+      navigate(`/rooms/${roomId}?year=${year}&month=${monthNum}`);
+    }
+  };
 
   return (
     <Layout>
@@ -62,13 +79,13 @@ export function DashboardPage() {
         <div>
           <Link to={`/rooms/${roomId}`} className="back-link">← Back to room</Link>
           <h1>Monthly Dashboard</h1>
-          <p className="text-muted">Visual breakdown of room expenses</p>
+          <p className="text-muted">Visual breakdown of room expenses · tap a month to view details</p>
         </div>
         <div className="year-select">
           <label>
             Year
             <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-              {[currentYear, currentYear - 1, currentYear - 2].map((y) => (
+              {availableYears.map((y) => (
                 <option key={y} value={y}>{y}</option>
               ))}
             </select>
@@ -85,25 +102,42 @@ export function DashboardPage() {
           <div className="stat-card card dashboard-total">
             <span className="stat-label">{year} Total Expenses</span>
             <span className="stat-value">{formatCurrency(data.yearTotal)}</span>
+            {yearChange && (
+              <span className={`change-badge ${(data.yearChangePercent ?? 0) >= 0 ? 'up' : 'down'}`}>
+                {yearChange} vs {year - 1}
+              </span>
+            )}
           </div>
 
           <div className="charts-grid">
             <div className="card chart-card">
               <h2>Monthly Expenses</h2>
+              <p className="text-muted table-hint">Click a bar to open that month&apos;s history</p>
               {monthlyWithData.length === 0 ? (
                 <p className="text-muted empty-text">No expenses recorded for {year}</p>
               ) : (
                 <div className="chart-container">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={data.monthly} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                       <XAxis dataKey="month" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
                       <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `₹${v}`} width={48} />
                       <Tooltip
                         formatter={(value) => [formatCurrency(Number(value ?? 0)), 'Total']}
-                        contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
+                        contentStyle={{ borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface)' }}
                       />
-                      <Bar dataKey="total" fill="#6366f1" radius={[6, 6, 0, 0]} />
+                      <Bar
+                        dataKey="total"
+                        fill="#6366f1"
+                        radius={[6, 6, 0, 0]}
+                        cursor="pointer"
+                        onClick={(barData) => {
+                          const payload = (barData as { payload?: { monthNum: number; total: number } }).payload;
+                          if (payload?.monthNum != null) {
+                            handleBarClick(payload.monthNum, payload.total ?? 0);
+                          }
+                        }}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -144,19 +178,42 @@ export function DashboardPage() {
 
           <div className="card">
             <h2>Monthly Breakdown</h2>
+            <p className="text-muted table-hint">Tap a month with expenses to view full history</p>
             <div className="table-wrap">
               <table className="data-table">
                 <thead>
                   <tr>
                     <th>Month</th>
                     <th>Total</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.monthly.map((row) => (
                     <tr key={row.monthNum}>
-                      <td>{row.month}</td>
+                      <td>
+                        {row.total > 0 ? (
+                          <Link
+                            to={`/rooms/${roomId}?year=${year}&month=${row.monthNum}`}
+                            className="month-link"
+                          >
+                            {row.month}
+                          </Link>
+                        ) : (
+                          <span className="text-muted">{row.month}</span>
+                        )}
+                      </td>
                       <td>{formatCurrency(row.total)}</td>
+                      <td>
+                        {row.total > 0 && (
+                          <Link
+                            to={`/rooms/${roomId}?year=${year}&month=${row.monthNum}`}
+                            className="btn btn-ghost btn-sm"
+                          >
+                            View →
+                          </Link>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
