@@ -143,24 +143,24 @@ export function RoomPage() {
     }
   };
 
-  const shareInvite = async () => {
-    if (!room) return;
-    const text = `Join "${room.name}" on RoomSplit! Use invite code: ${room.invite_code}`;
-    const url = `${window.location.origin}/rooms`;
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: `Join ${room.name}`, text, url });
-        showToast('Invite shared', 'success');
-      } else {
-        await navigator.clipboard.writeText(`${text}\n${url}`);
-        showToast('Invite copied (sharing not supported)', 'success');
-      }
-    } catch (err) {
-      if (err instanceof Error && err.name !== 'AbortError') {
-        showToast('Share cancelled', 'info');
-      }
-    }
-  };
+  // const shareInvite = async () => {
+  //   if (!room) return;
+  //   const text = `Join "${room.name}" on RoomSplit! Use invite code: ${room.invite_code}`;
+  //   const url = `${window.location.origin}/rooms`;
+  //   try {
+  //     if (navigator.share) {
+  //       await navigator.share({ title: `Join ${room.name}`, text, url });
+  //       showToast('Invite shared', 'success');
+  //     } else {
+  //       await navigator.clipboard.writeText(`${text}\n${url}`);
+  //       showToast('Invite copied (sharing not supported)', 'success');
+  //     }
+  //   } catch (err) {
+  //     if (err instanceof Error && err.name !== 'AbortError') {
+  //       showToast('Share cancelled', 'info');
+  //     }
+  //   }
+  // };
 
   const closeForm = () => {
     setShowForm(false);
