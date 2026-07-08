@@ -43,11 +43,22 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     res = await fetch(`/api${path}`, { ...options, headers });
   } catch {
     throw new Error(
-      'Cannot reach the API server. For local dev, run "npx vercel dev" in a separate terminal.'
+      'Cannot reach the API server. Use "npx vercel dev" and open http://localhost:3000'
     );
   }
 
-  const data = await res.json();
+  const text = await res.text();
+  let data: { error?: string; message?: string };
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    const preview = text.replace(/\s+/g, ' ').slice(0, 80);
+    throw new Error(
+      res.ok
+        ? 'Server returned an invalid response'
+        : `Server error (${res.status}): ${preview || 'non-JSON response'}`
+    );
+  }
 
   if (!res.ok) {
     throw new Error(data.error || data.message || 'Something went wrong');
