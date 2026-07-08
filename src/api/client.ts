@@ -38,7 +38,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const res = await fetch(`/api${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, { ...options, headers });
+  } catch {
+    throw new Error(
+      'Cannot reach the API server. For local dev, run "npx vercel dev" in a separate terminal.'
+    );
+  }
+
   const data = await res.json();
 
   if (!res.ok) {
