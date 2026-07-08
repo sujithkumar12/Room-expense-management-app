@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth.js';
-import { query } from '../_lib/db.js';
-import { handleError, json } from '../_lib/utils.js';
+import { requireAuth } from '../auth.js';
+import { query } from '../db.js';
+import { handleError, json } from '../utils.js';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleExpenseById(req: VercelRequest, res: VercelResponse) {
   try {
     const authUser = requireAuth(req);
     const expenseId = Number(req.query.id);

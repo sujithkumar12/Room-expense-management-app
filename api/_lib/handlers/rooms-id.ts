@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth.js';
-import { query } from '../_lib/db.js';
-import { handleError, json } from '../_lib/utils.js';
+import { requireAuth } from '../auth.js';
+import { query } from '../db.js';
+import { handleError, json } from '../utils.js';
 
 function parsePeriod(req: VercelRequest): { year: number; month: number } {
   const now = new Date();
@@ -48,7 +48,7 @@ async function getRoomAccess(roomId: number, userId: number) {
   );
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
   try {
     const authUser = requireAuth(req);
     const roomId = Number(req.query.id);
