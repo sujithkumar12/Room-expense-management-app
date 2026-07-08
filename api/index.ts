@@ -4,9 +4,8 @@ import { routeRequest } from './_lib/router.js';
 function extractApiPath(req: VercelRequest): string[] {
   const pathParam = req.query.path;
   if (pathParam) {
-    const segments = (Array.isArray(pathParam) ? pathParam : [pathParam])
-      .map(String)
-      .filter(Boolean);
+    const raw = Array.isArray(pathParam) ? pathParam.join('/') : String(pathParam);
+    const segments = raw.split('/').filter(Boolean);
     if (segments.length > 0) return segments;
   }
 
@@ -17,7 +16,7 @@ function extractApiPath(req: VercelRequest): string[] {
   }
 
   const trimmed = pathname.replace(/^\//, '');
-  if (trimmed && trimmed !== 'api') {
+  if (trimmed && trimmed !== 'api' && trimmed !== 'index') {
     return trimmed.split('/').filter(Boolean);
   }
 
