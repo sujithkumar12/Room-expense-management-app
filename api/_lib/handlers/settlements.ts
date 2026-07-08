@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireAuth } from '../_lib/auth.js';
-import { query } from '../_lib/db.js';
-import { handleError, json } from '../_lib/utils.js';
+import { requireAuth } from '../auth.js';
+import { query } from '../db.js';
+import { handleError, json } from '../utils.js';
 
 async function verifyMembership(roomId: number, userId: number) {
   const result = await query(
@@ -11,7 +11,7 @@ async function verifyMembership(roomId: number, userId: number) {
   return result.rows.length > 0;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleSettlements(req: VercelRequest, res: VercelResponse) {
   try {
     const authUser = requireAuth(req);
 

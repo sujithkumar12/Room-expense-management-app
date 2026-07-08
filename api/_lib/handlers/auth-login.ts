@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import bcrypt from 'bcryptjs';
-import { signToken } from '../_lib/auth.js';
-import { query } from '../_lib/db.js';
-import { handleError, json } from '../_lib/utils.js';
+import { signToken } from '../auth.js';
+import { query } from '../db.js';
+import { handleError, json } from '../utils.js';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleAuthLogin(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return json(res, 405, { error: 'Method not allowed' });
   }

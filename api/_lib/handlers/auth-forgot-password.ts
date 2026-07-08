@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
-import { query } from '../_lib/db.js';
-import { handleError, json } from '../_lib/utils.js';
+import { query } from '../db.js';
+import { handleError, json } from '../utils.js';
 
 const TOKEN_EXPIRY_HOURS = 1;
 
@@ -31,7 +31,7 @@ async function sendResetEmail(email: string, resetUrl: string) {
   return res.ok;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export async function handleAuthForgotPassword(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return json(res, 405, { error: 'Method not allowed' });
   }
