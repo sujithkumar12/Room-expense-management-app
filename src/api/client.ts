@@ -1,4 +1,4 @@
-import type { Room, Member, Expense, RoomSummary, DashboardData } from '../types';
+import type { Room, Member, Expense, RoomSummary, DashboardData, MonthOption, Settlement } from '../types';
 
 const TOKEN_KEY = 'roomsplit_token';
 const USER_KEY = 'roomsplit_user';
@@ -42,7 +42,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const data = await res.json();
 
   if (!res.ok) {
-    throw new Error(data.error || 'Something went wrong');
+    throw new Error(data.error || data.message || 'Something went wrong');
   }
 
   return data as T;
@@ -61,6 +61,18 @@ export const api = {
       { method: 'POST', body: JSON.stringify(body) }
     ),
 
+  forgotPassword: (email: string) =>
+    request<{ message: string }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (token: string, password: string) =>
+    request<{ message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password }),
+    }),
+
   getRooms: () => request<{ rooms: Room[] }>('/rooms'),
 
   createRoom: (name: string) =>
@@ -75,13 +87,20 @@ export const api = {
       body: JSON.stringify({ inviteCode }),
     }),
 
-  getRoom: (id: number) =>
-    request<{
+  getRoom: (id: number, year?: number, month?: number) => {
+    const params = new URLSearchParams();
+    if (year) params.set('year', String(year));
+    if (month) params.set('month', String(month));
+    const qs = params.toString();
+    return request<{
       room: Room;
       members: Member[];
       expenses: Expense[];
+      settlements: Settlement[];
       summary: RoomSummary;
-    }>(`/rooms/${id}`),
+      availableMonths: MonthOption[];
+    }>(`/rooms/${id}${qs ? `?${qs}` : ''}`);
+  },
 
   setWeeklyLimit: (roomId: number, weeklyLimit: number | null) =>
     request<{ room: Room }>(`/rooms/${roomId}`, {
@@ -111,6 +130,24 @@ export const api = {
 
   deleteExpense: (expenseId: number) =>
     request<{ success: boolean }>(`/expenses/${expenseId}`, {
+      method: 'DELETE',
+    }),
+
+  addSettlement: (body: {
+    roomId: number;
+    payeeId: number;
+    amount: number;
+    note?: string;
+    year: number;
+    month: number;
+  }) =>
+    request<{ settlement: Settlement }>('/settlements', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  deleteSettlement: (settlementId: number) =>
+    request<{ success: boolean }>(`/settlements/${settlementId}`, {
       method: 'DELETE',
     }),
 

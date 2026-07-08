@@ -3,15 +3,32 @@ import { requireAuth } from '../_lib/auth.js';
 import { query } from '../_lib/db.js';
 import { handleError, json } from '../_lib/utils.js';
 
-const MONTH_FILTER = `
-  EXTRACT(YEAR FROM e.expense_date) = EXTRACT(YEAR FROM CURRENT_DATE)
-  AND EXTRACT(MONTH FROM e.expense_date) = EXTRACT(MONTH FROM CURRENT_DATE)
-`;
+function parsePeriod(req: VercelRequest): { year: number; month: number } {
+  const now = new Date();
+  let year = Number(req.query.year) || now.getFullYear();
+  let month = Number(req.query.month) || now.getMonth() + 1;
 
-const WEEK_FILTER = `
-  e.expense_date >= date_trunc('week', CURRENT_DATE)::date
-  AND e.expense_date < (date_trunc('week', CURRENT_DATE) + interval '7 days')::date
-`;
+  if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+    year = now.getFullYear();
+  }
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    month = now.getMonth() + 1;
+  }
+
+  return { year, month };
+}
+
+function monthLabel(year: number, month: number): string {
+  return new Date(year, month - 1, 1).toLocaleDateString('en-IN', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function previousPeriod(year: number, month: number) {
+  if (month === 1) return { year: year - 1, month: 12 };
+  return { year, month: month - 1 };
+}
 
 async function getRoomAccess(roomId: number, userId: number) {
   return query<{
@@ -86,8 +103,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const room = accessResult.rows[0];
+    const { year, month } = parsePeriod(req);
+    const prev = previousPeriod(year, month);
+    const now = new Date();
+    const isCurrentMonth =
+      year === now.getFullYear() && month === now.getMonth() + 1;
 
-    const [membersResult, expensesResult, weeklyResult] = await Promise.all([
+    const [
+      membersResult,
+      expensesResult,
+      weeklyResult,
+      historyResult,
+      settlementsResult,
+      settlementTotalsResult,
+      prevMonthResult,
+    ] = await Promise.all([
       query<{
         id: number;
         name: string;
@@ -99,11 +129,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          FROM room_members rm
          INNER JOIN users u ON u.id = rm.user_id
          LEFT JOIN expenses e ON e.user_id = u.id AND e.room_id = $1
-           AND ${MONTH_FILTER.replace(/e\./g, 'e.')}
+           AND EXTRACT(YEAR FROM e.expense_date) = $2
+           AND EXTRACT(MONTH FROM e.expense_date) = $3
          WHERE rm.room_id = $1
          GROUP BY u.id, u.name, u.email
          ORDER BY u.name`,
-        [roomId]
+        [roomId, year, month]
       ),
       query(
         `SELECT e.id, e.amount::float AS amount, e.purpose, e.expense_date, e.created_at,
@@ -111,16 +142,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          FROM expenses e
          INNER JOIN users u ON u.id = e.user_id
          WHERE e.room_id = $1
-           AND ${MONTH_FILTER}
-         ORDER BY e.expense_date DESC, e.created_at DESC
-         LIMIT 100`,
+           AND EXTRACT(YEAR FROM e.expense_date) = $2
+           AND EXTRACT(MONTH FROM e.expense_date) = $3
+         ORDER BY e.expense_date DESC, e.created_at DESC`,
+        [roomId, year, month]
+      ),
+      isCurrentMonth
+        ? query<{ total: number }>(
+            `SELECT COALESCE(SUM(amount), 0)::float AS total
+             FROM expenses e
+             WHERE e.room_id = $1
+               AND e.expense_date >= date_trunc('week', CURRENT_DATE)::date
+               AND e.expense_date < (date_trunc('week', CURRENT_DATE) + interval '7 days')::date`,
+            [roomId]
+          )
+        : Promise.resolve({ rows: [{ total: 0 }] }),
+      query<{ year: number; month: number }>(
+        `SELECT DISTINCT
+           EXTRACT(YEAR FROM expense_date)::int AS year,
+           EXTRACT(MONTH FROM expense_date)::int AS month
+         FROM expenses
+         WHERE room_id = $1
+         ORDER BY year DESC, month DESC`,
         [roomId]
+      ),
+      query(
+        `SELECT s.id, s.amount::float AS amount, s.note, s.created_at,
+                payer.id AS payer_id, payer.name AS payer_name,
+                payee.id AS payee_id, payee.name AS payee_name
+         FROM settlements s
+         INNER JOIN users payer ON payer.id = s.payer_id
+         INNER JOIN users payee ON payee.id = s.payee_id
+         WHERE s.room_id = $1
+           AND s.settlement_year = $2
+           AND s.settlement_month = $3
+         ORDER BY s.created_at DESC`,
+        [roomId, year, month]
+      ),
+      query<{
+        user_id: number;
+        paid_out: number;
+        received_in: number;
+      }>(
+        `SELECT u.id AS user_id,
+                COALESCE(SUM(CASE WHEN s.payer_id = u.id THEN s.amount ELSE 0 END), 0)::float AS paid_out,
+                COALESCE(SUM(CASE WHEN s.payee_id = u.id THEN s.amount ELSE 0 END), 0)::float AS received_in
+         FROM room_members rm
+         INNER JOIN users u ON u.id = rm.user_id
+         LEFT JOIN settlements s ON s.room_id = rm.room_id
+           AND s.settlement_year = $2
+           AND s.settlement_month = $3
+           AND (s.payer_id = u.id OR s.payee_id = u.id)
+         WHERE rm.room_id = $1
+         GROUP BY u.id`,
+        [roomId, year, month]
       ),
       query<{ total: number }>(
         `SELECT COALESCE(SUM(amount), 0)::float AS total
-         FROM expenses e
-         WHERE e.room_id = $1 AND ${WEEK_FILTER}`,
-        [roomId]
+         FROM expenses
+         WHERE room_id = $1
+           AND EXTRACT(YEAR FROM expense_date) = $2
+           AND EXTRACT(MONTH FROM expense_date) = $3`,
+        [roomId, prev.year, prev.month]
       ),
     ]);
 
@@ -131,20 +214,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     const equalShare = memberCount > 0 ? monthlyExpense / memberCount : 0;
     const weeklyExpense = weeklyResult.rows[0]?.total ?? 0;
+    const previousMonthExpense = prevMonthResult.rows[0]?.total ?? 0;
 
-    const members = membersResult.rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      email: row.email,
-      totalPaid: row.total_paid,
-      balance: row.total_paid - equalShare,
-    }));
+    const settlementMap = new Map(
+      settlementTotalsResult.rows.map((row) => [
+        row.user_id,
+        { paidOut: row.paid_out, receivedIn: row.received_in },
+      ])
+    );
 
-    const now = new Date();
-    const monthLabel = now.toLocaleDateString('en-IN', {
-      month: 'long',
-      year: 'numeric',
+    const members = membersResult.rows.map((row) => {
+      const expenseBalance = row.total_paid - equalShare;
+      const settlements = settlementMap.get(row.id) ?? { paidOut: 0, receivedIn: 0 };
+      const balance =
+        expenseBalance + settlements.paidOut - settlements.receivedIn;
+      return {
+        id: row.id,
+        name: row.name,
+        email: row.email,
+        totalPaid: row.total_paid,
+        balance,
+        expenseBalance,
+        settledPaid: settlements.paidOut,
+        settledReceived: settlements.receivedIn,
+      };
     });
+
+    const historySet = new Set(
+      historyResult.rows.map((row) => `${row.year}-${row.month}`)
+    );
+    historySet.add(`${now.getFullYear()}-${now.getMonth() + 1}`);
+
+    const availableMonths = Array.from(historySet)
+      .map((key) => {
+        const [y, m] = key.split('-').map(Number);
+        return { year: y, month: m, label: monthLabel(y, m) };
+      })
+      .sort((a, b) => b.year - a.year || b.month - a.month);
+
+    let monthChangePercent: number | null = null;
+    if (previousMonthExpense > 0) {
+      monthChangePercent =
+        ((monthlyExpense - previousMonthExpense) / previousMonthExpense) * 100;
+    } else if (monthlyExpense > 0) {
+      monthChangePercent = 100;
+    }
 
     return json(res, 200, {
       room: {
@@ -153,13 +267,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
       members,
       expenses: expensesResult.rows,
+      settlements: settlementsResult.rows,
+      availableMonths,
       summary: {
         monthlyExpense,
+        previousMonthExpense,
+        monthChangePercent,
         weeklyExpense,
         weeklyLimit: room.weekly_limit,
         memberCount,
         equalShare,
-        monthLabel,
+        monthLabel: monthLabel(year, month),
+        previousMonthLabel: monthLabel(prev.year, prev.month),
+        selectedYear: year,
+        selectedMonth: month,
+        isCurrentMonth,
       },
     });
   } catch (error) {

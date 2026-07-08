@@ -21,6 +21,9 @@ export interface Member {
   email: string;
   totalPaid: number;
   balance: number;
+  expenseBalance?: number;
+  settledPaid?: number;
+  settledReceived?: number;
 }
 
 export interface Expense {
@@ -33,13 +36,36 @@ export interface Expense {
   user_name: string;
 }
 
+export interface Settlement {
+  id: number;
+  amount: number;
+  note: string | null;
+  created_at: string;
+  payer_id: number;
+  payer_name: string;
+  payee_id: number;
+  payee_name: string;
+}
+
 export interface RoomSummary {
   monthlyExpense: number;
+  previousMonthExpense: number;
+  monthChangePercent: number | null;
   weeklyExpense: number;
   weeklyLimit: number | null;
   memberCount: number;
   equalShare: number;
   monthLabel: string;
+  previousMonthLabel: string;
+  selectedYear: number;
+  selectedMonth: number;
+  isCurrentMonth: boolean;
+}
+
+export interface MonthOption {
+  year: number;
+  month: number;
+  label: string;
 }
 
 export interface MonthlyData {
@@ -53,4 +79,17 @@ export interface DashboardData {
   monthly: MonthlyData[];
   byMember: { name: string; total: number }[];
   yearTotal: number;
+  previousYearTotal: number;
+  yearChangePercent: number | null;
+  availableYears: number[];
+}
+
+export type ExpenseSort = 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc';
+
+export type ToastType = 'success' | 'error' | 'info';
+
+export interface ToastMessage {
+  id: number;
+  type: ToastType;
+  message: string;
 }

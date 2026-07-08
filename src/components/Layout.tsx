@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
+import { ThemeToggle } from './ThemeToggle';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const { showToast } = useToast();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -52,6 +55,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const confirmLogout = () => {
     setShowLogoutConfirm(false);
     logout();
+    showToast('Logged out successfully', 'info');
   };
 
   return (
@@ -66,36 +70,39 @@ export function Layout({ children }: { children: React.ReactNode }) {
             Rooms
           </Link>
         </nav>
-        <div className="header-user" ref={menuRef}>
-          <button
-            type="button"
-            className={`profile-btn${menuOpen ? ' open' : ''}`}
-            onClick={() => setMenuOpen((open) => !open)}
-            aria-label="Profile menu"
-            aria-expanded={menuOpen}
-            aria-haspopup="true"
-          >
-            <span className="profile-avatar">{initial}</span>
-          </button>
-          {menuOpen && (
-            <div className="profile-menu" role="menu">
-              <div className="profile-menu-header">
-                <span className="profile-menu-avatar">{initial}</span>
-                <div className="profile-menu-info">
-                  <span className="profile-menu-name">{user?.name}</span>
-                  <span className="profile-menu-email">{user?.email}</span>
+        <div className="header-actions">
+          <ThemeToggle />
+          <div className="header-user" ref={menuRef}>
+            <button
+              type="button"
+              className={`profile-btn${menuOpen ? ' open' : ''}`}
+              onClick={() => setMenuOpen((open) => !open)}
+              aria-label="Profile menu"
+              aria-expanded={menuOpen}
+              aria-haspopup="true"
+            >
+              <span className="profile-avatar">{initial}</span>
+            </button>
+            {menuOpen && (
+              <div className="profile-menu" role="menu">
+                <div className="profile-menu-header">
+                  <span className="profile-menu-avatar">{initial}</span>
+                  <div className="profile-menu-info">
+                    <span className="profile-menu-name">{user?.name}</span>
+                    <span className="profile-menu-email">{user?.email}</span>
+                  </div>
                 </div>
+                <button
+                  type="button"
+                  className="profile-menu-item"
+                  role="menuitem"
+                  onClick={handleLogoutClick}
+                >
+                  Log out
+                </button>
               </div>
-              <button
-                type="button"
-                className="profile-menu-item"
-                role="menuitem"
-                onClick={handleLogoutClick}
-              >
-                Log out
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </header>
       <main className="app-main">{children}</main>

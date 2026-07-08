@@ -2,9 +2,11 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { Layout } from '../components/Layout';
+import { useToast } from '../context/ToastContext';
 import type { Room } from '../types';
 
 export function RoomsPage() {
+  const { showToast } = useToast();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -37,6 +39,7 @@ export function RoomsPage() {
       await api.createRoom(roomName);
       setRoomName('');
       setShowCreate(false);
+      showToast('Room created successfully', 'success');
       await loadRooms();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create room');
@@ -53,6 +56,7 @@ export function RoomsPage() {
       await api.joinRoom(inviteCode);
       setInviteCode('');
       setShowJoin(false);
+      showToast('Joined room successfully', 'success');
       await loadRooms();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to join room');
