@@ -10,7 +10,9 @@ export type ActivityType =
   | 'member_left'
   | 'member_removed'
   | 'room_renamed'
-  | 'admin_transferred';
+  | 'admin_transferred'
+  | 'payment_confirmed'
+  | 'payment_rejected'
 
 export async function logRoomActivity(
   roomId: number,

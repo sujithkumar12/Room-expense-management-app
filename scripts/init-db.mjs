@@ -117,6 +117,22 @@ try {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`,
     'CREATE INDEX IF NOT EXISTS idx_room_activities_room ON room_activities(room_id, created_at DESC)',
+    `CREATE TABLE IF NOT EXISTS payment_requests (
+      id SERIAL PRIMARY KEY,
+      room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+      payer_id INTEGER REFERENCES users(id),
+      payee_id INTEGER REFERENCES users(id),
+      amount DECIMAL(10, 2) NOT NULL CHECK (amount > 0),
+      status VARCHAR(20) NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'confirmed', 'rejected', 'cancelled')),
+      settlement_year INTEGER NOT NULL,
+      settlement_month INTEGER NOT NULL CHECK (settlement_month BETWEEN 1 AND 12),
+      settlement_id INTEGER REFERENCES settlements(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      responded_at TIMESTAMPTZ
+    )`,
+    'CREATE INDEX IF NOT EXISTS idx_payment_requests_room_period ON payment_requests(room_id, settlement_year, settlement_month)',
+    'CREATE INDEX IF NOT EXISTS idx_payment_requests_payee_pending ON payment_requests(payee_id, status)',
   ];
 
   for (const statement of indexes) {

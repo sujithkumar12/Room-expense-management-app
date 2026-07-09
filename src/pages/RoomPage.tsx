@@ -5,9 +5,9 @@ import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
-import type { Expense, ExpenseSort, Member, MonthOption, Room, RoomSummary, Settlement } from '../types';
+import type { Expense, ExpenseSort, Member, MonthOption, PaymentRequest, Room, RoomSummary, Settlement } from '../types';
 import { buildUpiPaymentLink, suggestedPayAmount } from '../utils/upi';
-import { MdDeleteOutline, MdMoreVert, MdOutlineContentCopy, MdOutlineModeEdit, MdOutlineSettings } from 'react-icons/md';
+import { MdDeleteOutline, MdMoreVert, MdOutlineContentCopy, MdOutlineModeEdit, MdOutlinePayments, MdOutlineSettings } from 'react-icons/md';
 import { LuLayoutDashboard } from 'react-icons/lu';
 
 function formatCurrency(amount: number) {
@@ -61,6 +61,8 @@ export function RoomPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
   const [summary, setSummary] = useState<RoomSummary | null>(null);
   const [availableMonths, setAvailableMonths] = useState<MonthOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,8 +100,8 @@ export function RoomPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expenseSort, setExpenseSort] = useState<ExpenseSort>('date-desc');
 
-  const loadRoom = async (year: number, month: number) => {
-    setLoading(true);
+  const loadRoom = async (year: number, month: number, silent = false) => {
+    if (!silent) setLoading(true);
     setError('');
     try {
       const data = await api.getRoom(roomId, year, month);
@@ -107,6 +109,7 @@ export function RoomPage() {
       setMembers(data.members);
       setExpenses(data.expenses);
       setSettlements(data.settlements);
+      setPaymentRequests(data.paymentRequests ?? []);
       setSummary(data.summary);
       setAvailableMonths(data.availableMonths);
       setWeeklyLimitInput(
@@ -115,12 +118,22 @@ export function RoomPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load room');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     if (roomId) loadRoom(selectedYear, selectedMonth);
+  }, [roomId, selectedYear, selectedMonth]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && roomId) {
+        loadRoom(selectedYear, selectedMonth, true);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [roomId, selectedYear, selectedMonth]);
 
   useEffect(() => {
@@ -155,6 +168,13 @@ export function RoomPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openMemberMenuId]);
 
+  const incomingPaymentRequest = paymentRequests.find(
+    (pr) => pr.payee_id === user?.id && pr.status === 'pending'
+  );
+  const outgoingPaymentRequests = paymentRequests.filter(
+    (pr) => pr.payer_id === user?.id && pr.status === 'pending'
+  );
+
   const modalOpen =
     showForm ||
     showLimitForm ||
@@ -165,7 +185,8 @@ export function RoomPage() {
     confirmLeave ||
     confirmDeleteRoom ||
     confirmRename ||
-    confirmTransferAdmin;
+    confirmTransferAdmin ||
+    !!incomingPaymentRequest;
 
   useBodyScrollLock(modalOpen);
 
@@ -231,6 +252,14 @@ export function RoomPage() {
     setSettleAmount('');
     setSettlePayeeId('');
     setSettleNote('');
+  };
+
+  const openSettleForm = () => {
+    setSettleError('');
+    setSettleAmount('');
+    setSettlePayeeId('');
+    setSettleNote('');
+    setShowSettleForm(true);
   };
 
   const openLimitForm = () => {
@@ -350,6 +379,86 @@ export function RoomPage() {
       await loadRoom(selectedYear, selectedMonth);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to remove payment', 'error');
+    }
+  };
+
+  const hasPendingPaymentTo = (payeeId: number) =>
+    paymentRequests.some(
+      (pr) =>
+        pr.payer_id === user?.id &&
+        pr.payee_id === payeeId &&
+        pr.status === 'pending'
+    );
+
+  const handleUpiPay = async (member: Member, amount: number) => {
+    if (!room || hasPendingPaymentTo(member.id)) {
+      showToast('You already have a pending payment waiting for confirmation', 'info');
+      return;
+    }
+    setPaymentSubmitting(true);
+    try {
+      await api.createPaymentRequest({
+        roomId,
+        payeeId: member.id,
+        amount,
+        year: selectedYear,
+        month: selectedMonth,
+      });
+      const link = buildUpiPaymentLink({
+        upiId: member.upiId!,
+        payeeName: member.name,
+        amount,
+        note: `${room.name} - RoomSplit`,
+      });
+      showToast(
+        `Opened UPI. ${member.name} will be asked to confirm receipt.`,
+        'info'
+      );
+      window.location.href = link;
+      await loadRoom(selectedYear, selectedMonth);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to start payment', 'error');
+    } finally {
+      setPaymentSubmitting(false);
+    }
+  };
+
+  const handleConfirmPayment = async (requestId: number) => {
+    setPaymentSubmitting(true);
+    try {
+      await api.respondPaymentRequest(requestId, 'confirm');
+      showToast('Payment confirmed — balances updated', 'success');
+      await loadRoom(selectedYear, selectedMonth);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to confirm payment', 'error');
+    } finally {
+      setPaymentSubmitting(false);
+    }
+  };
+
+  const handleRejectPayment = async (requestId: number) => {
+    setPaymentSubmitting(true);
+    try {
+      await api.respondPaymentRequest(requestId, 'reject');
+      showToast('Payment declined — balance unchanged', 'info');
+      await loadRoom(selectedYear, selectedMonth);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to decline payment', 'error');
+    } finally {
+      setPaymentSubmitting(false);
+    }
+  };
+
+  const handleCancelPaymentRequest = async (requestId: number) => {
+    setPaymentSubmitting(true);
+    try {
+      await api.cancelPaymentRequest(requestId);
+      showToast('Payment request cancelled', 'info');
+      await loadRoom(selectedYear, selectedMonth);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to cancel request', 'error');
+    } finally {
+      setPaymentSubmitting(false);
     }
   };
 
@@ -571,13 +680,6 @@ export function RoomPage() {
           <Link to={`/rooms/${roomId}/dashboard`} className="btn btn-secondary">
           <LuLayoutDashboard /> Dashboard
           </Link>
-          {/* <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => setShowSettleForm(true)}
-          >
-            💸 Settle up
-          </button> */}
           {summary.isCurrentMonth && (
             <button
               type="button"
@@ -609,6 +711,17 @@ export function RoomPage() {
                 >
                   Activity log
                 </Link>
+                {/* <button
+                  type="button"
+                  className="room-menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setRoomMenuOpen(false);
+                    openSettleForm();
+                  }}
+                >
+                  <MdOutlinePayments /> Settle up
+                </button> */}
                 <button
                   type="button"
                   className="room-menu-item"
@@ -730,6 +843,32 @@ export function RoomPage() {
           })()}
         </div>
       </div>
+
+      {outgoingPaymentRequests.length > 0 && (
+        <section className="card payment-pending-card">
+          <h2>Pending UPI payments</h2>
+          <div className="settlement-list">
+            {outgoingPaymentRequests.map((pr) => (
+              <div key={pr.id} className="settlement-row">
+                <div className="settlement-info">
+                  <strong>You → {pr.payee_name}</strong>
+                  <span className="text-muted">
+                    {formatCurrency(pr.amount)} · waiting for confirmation
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={paymentSubmitting}
+                  onClick={() => handleCancelPaymentRequest(pr.id)}
+                >
+                  Cancel
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {settlements.length > 0 && (
         <section className="card settlements-card">
@@ -1060,6 +1199,47 @@ export function RoomPage() {
         </div>
       )}
 
+      {incomingPaymentRequest && (
+        <div className="expense-modal-backdrop" role="presentation">
+          <div
+            className="expense-modal confirm-modal payment-confirm-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="payment-confirm-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="confirm-modal-icon">💳</div>
+            <h3 id="payment-confirm-title">Confirm payment received?</h3>
+            <p className="confirm-modal-text">
+              <strong>{incomingPaymentRequest.payer_name}</strong> says they paid you{' '}
+              <strong>{formatCurrency(incomingPaymentRequest.amount)}</strong> via UPI
+              {summary ? ` for ${summary.monthLabel}` : ''}.
+            </p>
+            <p className="confirm-modal-text text-muted">
+              Tap <strong>Yes, received</strong> to update balances. Tap <strong>No</strong> if you did not receive this amount.
+            </p>
+            <div className="form-actions expense-modal-actions">
+              <button
+                type="button"
+                className="btn btn-primary btn-full"
+                disabled={paymentSubmitting}
+                onClick={() => handleConfirmPayment(incomingPaymentRequest.id)}
+              >
+                {paymentSubmitting ? 'Confirming...' : 'Yes, received'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger btn-full"
+                disabled={paymentSubmitting}
+                onClick={() => handleRejectPayment(incomingPaymentRequest.id)}
+              >
+                No, not received
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showForm && (
         <div className="expense-modal-backdrop" onClick={closeForm} role="presentation">
           <div className="expense-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -1140,18 +1320,18 @@ export function RoomPage() {
                   <span className={`balance-badge ${member.balance >= 0 ? 'positive' : 'negative'}`}>
                     {member.balance >= 0 ? '+' : ''}{formatCurrency(member.balance)}
                   </span>
-                  {canPayUpi && (
-                    <a
-                      href={buildUpiPaymentLink({
-                        upiId: member.upiId!,
-                        payeeName: member.name,
-                        amount: payAmount,
-                        note: `${room.name} - RoomSplit`,
-                      })}
+                  {canPayUpi && !hasPendingPaymentTo(member.id) && (
+                    <button
+                      type="button"
                       className="btn btn-primary btn-sm upi-pay-btn"
+                      disabled={paymentSubmitting}
+                      onClick={() => handleUpiPay(member, payAmount!)}
                     >
                       Pay ₹{payAmount}
-                    </a>
+                    </button>
+                  )}
+                  {hasPendingPaymentTo(member.id) && (
+                    <span className="pending-pay-badge">Awaiting confirm</span>
                   )}
                   {room.is_admin && member.id !== user?.id && (
                     <div className="member-menu-wrap">
