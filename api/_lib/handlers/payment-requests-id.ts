@@ -90,7 +90,7 @@ export async function handlePaymentRequestById(req: VercelRequest, res: VercelRe
         paymentRequest.room_id,
         authUser.userId,
         'payment_rejected',
-        `${payeeName} declined ₹${Math.round(paymentRequest.amount)} payment from ${payerName}`
+        `${payeeName} declined ₹${paymentRequest.amount.toFixed(2)} payment from ${payerName}`
       );
 
       return json(res, 200, { success: true, status: 'rejected' });
@@ -125,7 +125,7 @@ export async function handlePaymentRequestById(req: VercelRequest, res: VercelRe
       paymentRequest.room_id,
       authUser.userId,
       'payment_confirmed',
-      `${payeeName} confirmed ₹${Math.round(paymentRequest.amount)} from ${payerName}`
+      `${payeeName} confirmed ₹${paymentRequest.amount.toFixed(2)} from ${payerName}`
     );
 
     return json(res, 200, { success: true, status: 'confirmed', settlementId });

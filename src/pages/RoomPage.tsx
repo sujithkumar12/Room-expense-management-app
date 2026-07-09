@@ -6,17 +6,10 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import type { Expense, ExpenseSort, Member, MonthOption, PaymentRequest, Room, RoomSummary, Settlement } from '../types';
-import { buildUpiPaymentLink, suggestedPayAmount } from '../utils/upi';
+import { formatCurrency } from '../utils/currency';
+import { buildUpiPaymentLinks, isIOSDevice, openPaymentLink, suggestedPayAmount } from '../utils/upi';
 import { MdDeleteOutline, MdMoreVert, MdOutlineContentCopy, MdOutlineModeEdit, MdOutlineSettings } from 'react-icons/md';
 import { LuLayoutDashboard } from 'react-icons/lu';
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-IN', {
@@ -63,6 +56,11 @@ export function RoomPage() {
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<PaymentRequest[]>([]);
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+  const [upiPayModal, setUpiPayModal] = useState<{
+    member: Member;
+    amount: number;
+    links: ReturnType<typeof buildUpiPaymentLinks>;
+  } | null>(null);
   const [summary, setSummary] = useState<RoomSummary | null>(null);
   const [availableMonths, setAvailableMonths] = useState<MonthOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -186,7 +184,8 @@ export function RoomPage() {
     confirmDeleteRoom ||
     confirmRename ||
     confirmTransferAdmin ||
-    !!incomingPaymentRequest;
+    !!incomingPaymentRequest ||
+    !!upiPayModal;
 
   useBodyScrollLock(modalOpen);
 
@@ -404,22 +403,39 @@ export function RoomPage() {
         year: selectedYear,
         month: selectedMonth,
       });
-      const link = buildUpiPaymentLink({
+      const links = buildUpiPaymentLinks({
         upiId: member.upiId!,
         payeeName: member.name,
         amount,
         note: `${room.name} - RoomSplit`,
       });
+      await loadRoom(selectedYear, selectedMonth, true);
+      setUpiPayModal({ member, amount, links });
       showToast(
-        `Opened UPI. ${member.name} will be asked to confirm receipt.`,
+        `${member.name} will be asked to confirm after you pay.`,
         'info'
       );
-      window.location.href = link;
-      await loadRoom(selectedYear, selectedMonth);
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to start payment', 'error');
     } finally {
       setPaymentSubmitting(false);
+    }
+  };
+
+  const handleOpenUpiApp = (scheme: keyof ReturnType<typeof buildUpiPaymentLinks>) => {
+    if (!upiPayModal) return;
+    openPaymentLink(upiPayModal.links[scheme]);
+  };
+
+  const copyUpiDetails = async () => {
+    if (!upiPayModal) return;
+    const { member, amount } = upiPayModal;
+    const text = `Pay ${member.name}\nUPI: ${member.upiId}\nAmount: ₹${amount.toFixed(2)}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Payment details copied', 'success');
+    } catch {
+      showToast('Could not copy — please copy manually', 'error');
     }
   };
 
@@ -1199,6 +1215,70 @@ export function RoomPage() {
         </div>
       )}
 
+      {upiPayModal && (
+        <div
+          className="expense-modal-backdrop"
+          onClick={() => setUpiPayModal(null)}
+          role="presentation"
+        >
+          <div
+            className="expense-modal upi-pay-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="upi-pay-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="expense-modal-header">
+              <div>
+                <h3 id="upi-pay-title">Pay {upiPayModal.member.name}</h3>
+                <p className="expense-modal-hint">
+                  Amount: <strong>{formatCurrency(upiPayModal.amount)}</strong>
+                  <br />
+                  UPI: <strong>{upiPayModal.member.upiId}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setUpiPayModal(null)}
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            {isIOSDevice() ? (
+              <p className="upi-pay-hint text-muted">
+                Choose your UPI app below. Avoid opening WhatsApp unless that is your UPI app.
+              </p>
+            ) : (
+              <p className="upi-pay-hint text-muted">
+                Choose your preferred UPI app to complete the payment.
+              </p>
+            )}
+            <div className="upi-app-grid">
+              <button type="button" className="btn btn-secondary upi-app-btn" onClick={() => handleOpenUpiApp('gpay')}>
+                Google Pay
+              </button>
+              <button type="button" className="btn btn-secondary upi-app-btn" onClick={() => handleOpenUpiApp('phonepe')}>
+                PhonePe
+              </button>
+              <button type="button" className="btn btn-secondary upi-app-btn" onClick={() => handleOpenUpiApp('paytm')}>
+                Paytm
+              </button>
+              <button type="button" className="btn btn-ghost upi-app-btn" onClick={() => handleOpenUpiApp('upi')}>
+                Other UPI app
+              </button>
+            </div>
+            <button type="button" className="btn btn-ghost btn-full upi-copy-btn" onClick={copyUpiDetails}>
+              <MdOutlineContentCopy /> Copy payment details
+            </button>
+            <p className="upi-pay-footnote text-muted">
+              After paying, {upiPayModal.member.name.split(' ')[0]} must confirm receipt in the app.
+            </p>
+          </div>
+        </div>
+      )}
+
       {incomingPaymentRequest && (
         <div className="expense-modal-backdrop" role="presentation">
           <div
@@ -1327,7 +1407,7 @@ export function RoomPage() {
                       disabled={paymentSubmitting}
                       onClick={() => handleUpiPay(member, payAmount!)}
                     >
-                      Pay ₹{payAmount}
+                      Pay {formatCurrency(payAmount)}
                     </button>
                   )}
                   {hasPendingPaymentTo(member.id) && (
