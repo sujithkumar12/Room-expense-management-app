@@ -1,4 +1,4 @@
-import type { Room, Member, Expense, RoomSummary, DashboardData, MonthOption, Settlement } from '../types';
+import type { Room, Member, Expense, RoomSummary, DashboardData, MonthOption, Settlement, User, RoomActivity } from '../types';
 
 const TOKEN_KEY = 'roomsplit_token';
 const USER_KEY = 'roomsplit_user';
@@ -126,6 +126,50 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ weeklyLimit }),
     }),
+
+  renameRoom: (roomId: number, name: string) =>
+    request<{ room: Room }>(`/rooms/${roomId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    }),
+
+  transferAdmin: (roomId: number, transferAdminTo: number) =>
+    request<{ room: Room }>(`/rooms/${roomId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ transferAdminTo }),
+    }),
+
+  leaveRoom: (roomId: number) =>
+    request<{ success: boolean; roomDeleted?: boolean }>(`/rooms/${roomId}/leave`, {
+      method: 'POST',
+    }),
+
+  removeMember: (roomId: number, memberId: number) =>
+    request<{ success: boolean }>(`/rooms/${roomId}/members/${memberId}`, {
+      method: 'DELETE',
+    }),
+
+  deleteRoom: (roomId: number) =>
+    request<{ success: boolean }>(`/rooms/${roomId}`, {
+      method: 'DELETE',
+    }),
+
+  getProfile: () => request<{ user: User }>('/profile'),
+
+  updateProfile: (body: { name?: string; upiId?: string | null }) =>
+    request<{ user: User }>('/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  changePassword: (currentPassword: string, newPassword: string) =>
+    request<{ message: string }>('/profile/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    }),
+
+  getRoomActivity: (roomId: number) =>
+    request<{ activities: RoomActivity[] }>(`/rooms/${roomId}/activity`),
 
   addExpense: (body: {
     roomId: number;

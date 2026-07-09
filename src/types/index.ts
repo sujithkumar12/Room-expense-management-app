@@ -2,6 +2,8 @@ export interface User {
   id: number;
   name: string;
   email: string;
+  upiId?: string | null;
+  createdAt?: string;
 }
 
 export interface Room {
@@ -19,6 +21,7 @@ export interface Member {
   id: number;
   name: string;
   email: string;
+  upiId?: string | null;
   totalPaid: number;
   balance: number;
   expenseBalance?: number;
@@ -82,6 +85,15 @@ export interface DashboardData {
   previousYearTotal: number;
   yearChangePercent: number | null;
   availableYears: number[];
+  currentMonthTotal: number;
+  currentMonthLabel: string;
+  currentMonthNum: number;
+  currentMonthYear: number;
+  previousMonthTotal: number;
+  previousMonthLabel: string;
+  monthChangePercent: number | null;
+  currentWeekTotal: number;
+  weeklyLimit: number | null;
 }
 
 export type ExpenseSort = 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-asc';
@@ -92,4 +104,12 @@ export interface ToastMessage {
   id: number;
   type: ToastType;
   message: string;
+}
+
+export interface RoomActivity {
+  id: string;
+  activity_type: string;
+  message: string;
+  actor_name: string;
+  created_at: string;
 }

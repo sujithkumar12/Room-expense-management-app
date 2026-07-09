@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { logRoomActivity } from '../activity.js';
 import { requireAuth } from '../auth.js';
 import { query } from '../db.js';
 import { handleError, json } from '../utils.js';
@@ -58,7 +59,7 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'PATCH') {
-      const { weeklyLimit } = req.body || {};
+      const { weeklyLimit, name, transferAdminTo } = req.body || {};
       const roomResult = await getRoomAccess(roomId, authUser.userId);
 
       if (roomResult.rows.length === 0) {
@@ -66,7 +67,76 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
       }
 
       const room = roomResult.rows[0];
-      if (room.created_by !== authUser.userId) {
+      const isAdmin = room.created_by === authUser.userId;
+
+      if (name !== undefined) {
+        if (!isAdmin) {
+          return json(res, 403, { error: 'Only the room admin can rename the room' });
+        }
+        if (!name?.trim()) {
+          return json(res, 400, { error: 'Room name is required' });
+        }
+        const updated = await query(
+          `UPDATE rooms SET name = $1 WHERE id = $2
+           RETURNING id, name, invite_code, created_at, created_by, weekly_limit::float AS weekly_limit`,
+          [name.trim(), roomId]
+        );
+        const actor = await query<{ name: string }>('SELECT name FROM users WHERE id = $1', [
+          authUser.userId,
+        ]);
+        await logRoomActivity(
+          roomId,
+          authUser.userId,
+          'room_renamed',
+          `${actor.rows[0]?.name ?? 'Someone'} renamed the room to "${name.trim()}"`
+        );
+        return json(res, 200, { room: { ...updated.rows[0], is_admin: true } });
+      }
+
+      if (transferAdminTo !== undefined) {
+        if (!isAdmin) {
+          return json(res, 403, { error: 'Only the room admin can transfer admin role' });
+        }
+        const newAdminId = Number(transferAdminTo);
+        if (!newAdminId || Number.isNaN(newAdminId)) {
+          return json(res, 400, { error: 'Valid member id is required' });
+        }
+        if (newAdminId === authUser.userId) {
+          return json(res, 400, { error: 'You are already the admin' });
+        }
+        const memberCheck = await query(
+          'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+          [roomId, newAdminId]
+        );
+        if (memberCheck.rows.length === 0) {
+          return json(res, 400, { error: 'That user is not a member of this room' });
+        }
+        const newAdmin = await query<{ name: string }>(
+          'SELECT name FROM users WHERE id = $1',
+          [newAdminId]
+        );
+        const updated = await query(
+          `UPDATE rooms SET created_by = $1 WHERE id = $2
+           RETURNING id, name, invite_code, created_at, created_by, weekly_limit::float AS weekly_limit`,
+          [newAdminId, roomId]
+        );
+        const actor = await query<{ name: string }>('SELECT name FROM users WHERE id = $1', [
+          authUser.userId,
+        ]);
+        await logRoomActivity(
+          roomId,
+          authUser.userId,
+          'admin_transferred',
+          `${actor.rows[0]?.name ?? 'Admin'} transferred admin to ${newAdmin.rows[0]?.name ?? 'a member'}`
+        );
+        return json(res, 200, { room: { ...updated.rows[0], is_admin: false } });
+      }
+
+      if (weeklyLimit === undefined) {
+        return json(res, 400, { error: 'No valid fields to update' });
+      }
+
+      if (!isAdmin) {
         return json(res, 403, { error: 'Only the room admin can set the weekly limit' });
       }
 
@@ -86,6 +156,22 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
       );
 
       return json(res, 200, { room: updated.rows[0] });
+    }
+
+    if (req.method === 'DELETE') {
+      const roomResult = await getRoomAccess(roomId, authUser.userId);
+
+      if (roomResult.rows.length === 0) {
+        return json(res, 403, { error: 'You are not a member of this room' });
+      }
+
+      const room = roomResult.rows[0];
+      if (room.created_by !== authUser.userId) {
+        return json(res, 403, { error: 'Only the room admin can delete the room' });
+      }
+
+      await query('DELETE FROM rooms WHERE id = $1', [roomId]);
+      return json(res, 200, { success: true });
     }
 
     if (req.method !== 'GET') {
@@ -122,9 +208,10 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
         id: number;
         name: string;
         email: string;
+        upi_id: string | null;
         total_paid: number;
       }>(
-        `SELECT u.id, u.name, u.email,
+        `SELECT u.id, u.name, u.email, u.upi_id,
                 COALESCE(SUM(e.amount), 0)::float AS total_paid
          FROM room_members rm
          INNER JOIN users u ON u.id = rm.user_id
@@ -132,7 +219,7 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
            AND EXTRACT(YEAR FROM e.expense_date) = $2
            AND EXTRACT(MONTH FROM e.expense_date) = $3
          WHERE rm.room_id = $1
-         GROUP BY u.id, u.name, u.email
+         GROUP BY u.id, u.name, u.email, u.upi_id
          ORDER BY u.name`,
         [roomId, year, month]
       ),
@@ -232,6 +319,7 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
         id: row.id,
         name: row.name,
         email: row.email,
+        upiId: row.upi_id,
         totalPaid: row.total_paid,
         balance,
         expenseBalance,

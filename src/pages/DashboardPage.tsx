@@ -66,6 +66,13 @@ export function DashboardPage() {
     ? data.availableYears
     : [currentYear, currentYear - 1, currentYear - 2];
   const yearChange = formatChange(data?.yearChangePercent ?? null);
+  const monthChange = formatChange(data?.monthChangePercent ?? null);
+  const weeklyPercent = data?.weeklyLimit
+    ? Math.min((data.currentWeekTotal / data.weeklyLimit) * 100, 100)
+    : 0;
+  const weeklyOver = data?.weeklyLimit
+    ? data.currentWeekTotal > data.weeklyLimit
+    : false;
 
   const handleBarClick = (monthNum: number, total: number) => {
     if (total > 0) {
@@ -99,14 +106,57 @@ export function DashboardPage() {
         <div className="loading-inline"><div className="spinner" /></div>
       ) : data ? (
         <>
-          <div className="stat-card card dashboard-total">
-            <span className="stat-label">{year} Total Expenses</span>
-            <span className="stat-value">{formatCurrency(data.yearTotal)}</span>
-            {yearChange && (
-              <span className={`change-badge ${(data.yearChangePercent ?? 0) >= 0 ? 'up' : 'down'}`}>
-                {yearChange} vs {year - 1}
+          <div className="stats-grid stats-grid-3 dashboard-stats">
+            <div className="stat-card card">
+              <span className="stat-label">Current Month</span>
+              <span className="stat-value accent">{formatCurrency(data.currentMonthTotal)}</span>
+              <span className="stat-hint">{data.currentMonthLabel}</span>
+              {monthChange && (
+                <span className={`change-badge ${(data.monthChangePercent ?? 0) >= 0 ? 'up' : 'down'}`}>
+                  {monthChange} vs {data.previousMonthLabel}
+                </span>
+              )}
+              {data.currentMonthTotal > 0 && (
+                <Link
+                  to={`/rooms/${roomId}?year=${data.currentMonthYear}&month=${data.currentMonthNum}`}
+                  className="btn btn-ghost btn-sm dashboard-stat-link"
+                >
+                  View month →
+                </Link>
+              )}
+            </div>
+
+            <div className="stat-card card">
+              <span className="stat-label">Weekly Spend</span>
+              <span className={`stat-value ${weeklyOver ? 'negative' : ''}`}>
+                {formatCurrency(data.currentWeekTotal)}
               </span>
-            )}
+              {data.weeklyLimit ? (
+                <>
+                  <span className="stat-hint">
+                    of {formatCurrency(data.weeklyLimit)} limit · resets Monday
+                  </span>
+                  <div className="progress-bar">
+                    <div
+                      className={`progress-fill${weeklyOver ? ' over' : ''}`}
+                      style={{ width: `${weeklyPercent}%` }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <span className="stat-hint">No weekly limit set</span>
+              )}
+            </div>
+
+            <div className="stat-card card">
+              <span className="stat-label">{year} Total Expenses</span>
+              <span className="stat-value">{formatCurrency(data.yearTotal)}</span>
+              {yearChange && (
+                <span className={`change-badge ${(data.yearChangePercent ?? 0) >= 0 ? 'up' : 'down'}`}>
+                  {yearChange} vs {year - 1}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="charts-grid">

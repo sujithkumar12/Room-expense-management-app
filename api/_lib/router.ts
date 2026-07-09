@@ -8,6 +8,10 @@ import { handleExpenseById } from './handlers/expenses-id.js';
 import { handleExpenses } from './handlers/expenses.js';
 import { handleHealth } from './handlers/health.js';
 import { handleRoomById } from './handlers/rooms-id.js';
+import { handleRoomLeave, handleRemoveMember } from './handlers/rooms-members.js';
+import { handleProfile } from './handlers/profile.js';
+import { handleProfileChangePassword } from './handlers/profile-change-password.js';
+import { handleRoomActivity } from './handlers/rooms-activity.js';
 import { handleRoomsJoin } from './handlers/rooms-join.js';
 import { handleRooms } from './handlers/rooms.js';
 import { handleSettlementById } from './handlers/settlements-id.js';
@@ -45,12 +49,42 @@ export async function routeRequest(
     return handleAuthResetPassword(req, res);
   }
 
+  if (segment0 === 'profile' && segment1 === 'change-password' && path.length === 2) {
+    return handleProfileChangePassword(req, res);
+  }
+
+  if (segment0 === 'profile' && path.length === 1) {
+    return handleProfile(req, res);
+  }
+
   if (segment0 === 'rooms' && path.length === 1) {
     return handleRooms(req, res);
   }
 
   if (segment0 === 'rooms' && segment1 === 'join' && path.length === 2) {
     return handleRoomsJoin(req, res);
+  }
+
+  if (segment0 === 'rooms' && segment1 && path[2] === 'leave' && path.length === 3) {
+    req.query.id = segment1;
+    return handleRoomLeave(req, res);
+  }
+
+  if (
+    segment0 === 'rooms' &&
+    segment1 &&
+    path[2] === 'members' &&
+    path[3] &&
+    path.length === 4
+  ) {
+    req.query.id = segment1;
+    req.query.memberId = path[3];
+    return handleRemoveMember(req, res);
+  }
+
+  if (segment0 === 'rooms' && segment1 && path[2] === 'activity' && path.length === 3) {
+    req.query.id = segment1;
+    return handleRoomActivity(req, res);
   }
 
   if (segment0 === 'rooms' && segment1 && path.length === 2) {
