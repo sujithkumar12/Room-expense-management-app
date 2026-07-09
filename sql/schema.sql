@@ -3,6 +3,7 @@ CREATE TABLE IF NOT EXISTS users (
   name VARCHAR(255) NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
+  upi_id VARCHAR(255),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -60,3 +61,14 @@ CREATE INDEX IF NOT EXISTS idx_room_members_room ON room_members(room_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_settlements_room_period ON settlements(room_id, settlement_year, settlement_month);
 CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_hash ON password_reset_tokens(token_hash);
+
+CREATE TABLE IF NOT EXISTS room_activities (
+  id SERIAL PRIMARY KEY,
+  room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
+  actor_id INTEGER REFERENCES users(id),
+  activity_type VARCHAR(50) NOT NULL,
+  message VARCHAR(500) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_room_activities_room ON room_activities(room_id, created_at DESC);

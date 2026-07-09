@@ -3,6 +3,18 @@ import { requireAuth } from '../auth.js';
 import { query } from '../db.js';
 import { handleError, json } from '../utils.js';
 
+function previousPeriod(year: number, month: number) {
+  if (month === 1) return { year: year - 1, month: 12 };
+  return { year, month: month - 1 };
+}
+
+function monthLabel(year: number, month: number): string {
+  return new Date(year, month - 1, 1).toLocaleDateString('en-IN', {
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
 export async function handleDashboardMonthly(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     return json(res, 405, { error: 'Method not allowed' });
@@ -26,7 +38,12 @@ export async function handleDashboardMonthly(req: VercelRequest, res: VercelResp
       return json(res, 403, { error: 'You are not a member of this room' });
     }
 
-    const [monthlyResult, byMemberResult, yearsResult, prevYearResult] = await Promise.all([
+    const now = new Date();
+    const currentCalendarYear = now.getFullYear();
+    const currentCalendarMonth = now.getMonth() + 1;
+    const prev = previousPeriod(currentCalendarYear, currentCalendarMonth);
+
+    const [monthlyResult, byMemberResult, yearsResult, prevYearResult, currentMonthResult, prevMonthResult, weeklyResult, roomResult] = await Promise.all([
       query(
         `SELECT
            EXTRACT(MONTH FROM expense_date)::int AS month,
@@ -63,6 +80,34 @@ export async function handleDashboardMonthly(req: VercelRequest, res: VercelResp
            AND EXTRACT(YEAR FROM expense_date) = $2`,
         [roomId, year - 1]
       ),
+      query<{ total: number }>(
+        `SELECT COALESCE(SUM(amount), 0)::float AS total
+         FROM expenses
+         WHERE room_id = $1
+           AND EXTRACT(YEAR FROM expense_date) = $2
+           AND EXTRACT(MONTH FROM expense_date) = $3`,
+        [roomId, currentCalendarYear, currentCalendarMonth]
+      ),
+      query<{ total: number }>(
+        `SELECT COALESCE(SUM(amount), 0)::float AS total
+         FROM expenses
+         WHERE room_id = $1
+           AND EXTRACT(YEAR FROM expense_date) = $2
+           AND EXTRACT(MONTH FROM expense_date) = $3`,
+        [roomId, prev.year, prev.month]
+      ),
+      query<{ total: number }>(
+        `SELECT COALESCE(SUM(amount), 0)::float AS total
+         FROM expenses
+         WHERE room_id = $1
+           AND expense_date >= date_trunc('week', CURRENT_DATE)::date
+           AND expense_date < (date_trunc('week', CURRENT_DATE) + interval '7 days')::date`,
+        [roomId]
+      ),
+      query<{ weekly_limit: number | null }>(
+        `SELECT weekly_limit::float AS weekly_limit FROM rooms WHERE id = $1`,
+        [roomId]
+      ),
     ]);
 
     const monthNames = [
@@ -98,6 +143,19 @@ export async function handleDashboardMonthly(req: VercelRequest, res: VercelResp
       yearChangePercent = 100;
     }
 
+    const currentMonthTotal = currentMonthResult.rows[0]?.total ?? 0;
+    const previousMonthTotal = prevMonthResult.rows[0]?.total ?? 0;
+    const currentWeekTotal = weeklyResult.rows[0]?.total ?? 0;
+    const weeklyLimit = roomResult.rows[0]?.weekly_limit ?? null;
+
+    let monthChangePercent: number | null = null;
+    if (previousMonthTotal > 0) {
+      monthChangePercent =
+        ((currentMonthTotal - previousMonthTotal) / previousMonthTotal) * 100;
+    } else if (currentMonthTotal > 0) {
+      monthChangePercent = 100;
+    }
+
     return json(res, 200, {
       year,
       monthly,
@@ -106,6 +164,15 @@ export async function handleDashboardMonthly(req: VercelRequest, res: VercelResp
       previousYearTotal,
       yearChangePercent,
       availableYears,
+      currentMonthTotal,
+      currentMonthLabel: monthLabel(currentCalendarYear, currentCalendarMonth),
+      currentMonthNum: currentCalendarMonth,
+      currentMonthYear: currentCalendarYear,
+      previousMonthTotal,
+      previousMonthLabel: monthLabel(prev.year, prev.month),
+      monthChangePercent,
+      currentWeekTotal,
+      weeklyLimit,
     });
   } catch (error) {
     return handleError(res, error);

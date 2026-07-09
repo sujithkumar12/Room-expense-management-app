@@ -26,6 +26,12 @@ const RoomPage = lazy(() =>
 const DashboardPage = lazy(() =>
   import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage }))
 );
+const ProfilePage = lazy(() =>
+  import('./pages/ProfilePage').then((m) => ({ default: m.ProfilePage }))
+);
+const RoomActivityPage = lazy(() =>
+  import('./pages/RoomActivityPage').then((m) => ({ default: m.RoomActivityPage }))
+);
 
 function PageLoader() {
   return (
@@ -55,7 +61,9 @@ export default function App() {
                 <Route element={<ProtectedRoute />}>
                   <Route path="/rooms" element={<RoomsPage />} />
                   <Route path="/rooms/:id" element={<RoomPage />} />
+                  <Route path="/rooms/:id/activity" element={<RoomActivityPage />} />
                   <Route path="/rooms/:id/dashboard" element={<DashboardPage />} />
+                  <Route path="/profile" element={<ProfilePage />} />
                 </Route>
 
                 <Route path="*" element={<Navigate to="/rooms" replace />} />

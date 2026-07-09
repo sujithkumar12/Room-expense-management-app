@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import type { Expense, ExpenseSort, Member, MonthOption, Room, RoomSummary, Settlement } from '../types';
-import { MdDeleteOutline, MdOutlineContentCopy, MdOutlineModeEdit } from 'react-icons/md';
+import { buildUpiPaymentLink, suggestedPayAmount } from '../utils/upi';
+import { MdDeleteOutline, MdMoreVert, MdOutlineContentCopy, MdOutlineModeEdit, MdOutlineSettings } from 'react-icons/md';
 import { LuLayoutDashboard } from 'react-icons/lu';
 
 function formatCurrency(amount: number) {
@@ -45,6 +47,7 @@ function formatChange(percent: number | null) {
 
 export function RoomPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { showToast } = useToast();
@@ -66,6 +69,19 @@ export function RoomPage() {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [showLimitForm, setShowLimitForm] = useState(false);
   const [showSettleForm, setShowSettleForm] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [roomMenuOpen, setRoomMenuOpen] = useState(false);
+  const [openMemberMenuId, setOpenMemberMenuId] = useState<number | null>(null);
+  const roomMenuRef = useRef<HTMLDivElement>(null);
+  const [pendingRemoveMember, setPendingRemoveMember] = useState<Member | null>(null);
+  const [confirmRemoveMember, setConfirmRemoveMember] = useState(false);
+  const [transferAdminTarget, setTransferAdminTarget] = useState<Member | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmDeleteRoom, setConfirmDeleteRoom] = useState(false);
+  const [confirmRename, setConfirmRename] = useState(false);
+  const [confirmTransferAdmin, setConfirmTransferAdmin] = useState(false);
+  const [settingsError, setSettingsError] = useState('');
+  const [roomNameInput, setRoomNameInput] = useState('');
   const [expenseToDelete, setExpenseToDelete] = useState<Expense | null>(null);
   const [formError, setFormError] = useState('');
   const [limitError, setLimitError] = useState('');
@@ -117,13 +133,41 @@ export function RoomPage() {
   }, [expenses, expenseFilter]);
 
   useEffect(() => {
-    const modalOpen = showForm || showLimitForm || showSettleForm || expenseToDelete;
-    if (!modalOpen) return;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
+    if (!roomMenuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (roomMenuRef.current && !roomMenuRef.current.contains(e.target as Node)) {
+        setRoomMenuOpen(false);
+      }
     };
-  }, [showForm, showLimitForm, showSettleForm, expenseToDelete]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [roomMenuOpen]);
+
+  useEffect(() => {
+    if (openMemberMenuId === null) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.member-menu-wrap')) {
+        setOpenMemberMenuId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openMemberMenuId]);
+
+  const modalOpen =
+    showForm ||
+    showLimitForm ||
+    showSettleForm ||
+    showSettings ||
+    !!expenseToDelete ||
+    (confirmRemoveMember && !!pendingRemoveMember) ||
+    confirmLeave ||
+    confirmDeleteRoom ||
+    confirmRename ||
+    confirmTransferAdmin;
+
+  useBodyScrollLock(modalOpen);
 
   const handleMonthChange = (value: string) => {
     const [year, month] = value.split('-').map(Number);
@@ -309,6 +353,126 @@ export function RoomPage() {
     }
   };
 
+  const openSettings = () => {
+    setSettingsError('');
+    setRoomNameInput(room?.name ?? '');
+    setShowSettings(true);
+  };
+
+  const closeSettings = () => {
+    setShowSettings(false);
+    setSettingsError('');
+  };
+
+  const handleRenameRoom = (e: FormEvent) => {
+    e.preventDefault();
+    setSettingsError('');
+    if (!roomNameInput.trim()) {
+      setSettingsError('Room name is required');
+      return;
+    }
+    if (roomNameInput.trim() === room?.name) {
+      setSettingsError('Enter a different name to rename');
+      return;
+    }
+    closeSettings();
+    setConfirmRename(true);
+  };
+
+  const confirmRenameRoom = async () => {
+    setSubmitting(true);
+    try {
+      const { room: updated } = await api.renameRoom(roomId, roomNameInput.trim());
+      setRoom(updated);
+      setConfirmRename(false);
+      showToast('Room renamed', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to rename room', 'error');
+      setConfirmRename(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const requestTransferAdmin = (member: Member) => {
+    setTransferAdminTarget(member);
+    setConfirmTransferAdmin(true);
+  };
+
+  const confirmTransferAdminAction = async () => {
+    if (!transferAdminTarget) return;
+    setSubmitting(true);
+    try {
+      await api.transferAdmin(roomId, transferAdminTarget.id);
+      setConfirmTransferAdmin(false);
+      setTransferAdminTarget(null);
+      showToast('Admin role transferred', 'success');
+      await loadRoom(selectedYear, selectedMonth);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to transfer admin', 'error');
+      setConfirmTransferAdmin(false);
+      setTransferAdminTarget(null);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const requestRemoveMember = (member: Member) => {
+    setPendingRemoveMember(member);
+    setConfirmRemoveMember(true);
+  };
+
+  const confirmRemoveMemberAction = async () => {
+    if (!pendingRemoveMember) return;
+    setSubmitting(true);
+    try {
+      await api.removeMember(roomId, pendingRemoveMember.id);
+      setConfirmRemoveMember(false);
+      setPendingRemoveMember(null);
+      showToast(`${pendingRemoveMember.name} removed from room`, 'success');
+      await loadRoom(selectedYear, selectedMonth);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to remove member', 'error');
+      setConfirmRemoveMember(false);
+      setPendingRemoveMember(null);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const confirmLeaveRoom = async () => {
+    setSubmitting(true);
+    try {
+      const result = await api.leaveRoom(roomId);
+      setConfirmLeave(false);
+      showToast(
+        result.roomDeleted ? 'Room deleted — you were the last member' : 'You left the room',
+        'success'
+      );
+      navigate('/rooms');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to leave room', 'error');
+      setConfirmLeave(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const confirmDeleteRoomAction = async () => {
+    setSubmitting(true);
+    try {
+      await api.deleteRoom(roomId);
+      setConfirmDeleteRoom(false);
+      showToast('Room deleted', 'success');
+      navigate('/rooms');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to delete room', 'error');
+      setConfirmDeleteRoom(false);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const filteredExpenses = useMemo(() => {
     let list =
       expenseFilter === 'all'
@@ -365,8 +529,16 @@ export function RoomPage() {
   const expenseCountByMember = (memberId: number) =>
     expenses.filter((e) => e.user_id === memberId).length;
 
-  const tabMembers = [...members].sort((a, b) => a.name.localeCompare(b.name));
+  const tabMembers = (() => {
+    const me = members.find((m) => m.id === user?.id);
+    const others = members
+      .filter((m) => m.id !== user?.id)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return me ? [me, ...others] : others;
+  })();
   const otherMembers = members.filter((m) => m.id !== user?.id);
+  const myMember = members.find((m) => m.id === user?.id);
+  const myBalance = myMember?.balance ?? 0;
   const formDateBounds = editingExpense
     ? getMonthDateBounds(
       new Date(editingExpense.expense_date).getFullYear(),
@@ -395,6 +567,7 @@ export function RoomPage() {
           </p>
         </div>
         <div className="page-actions">
+          
           <Link to={`/rooms/${roomId}/dashboard`} className="btn btn-secondary">
           <LuLayoutDashboard /> Dashboard
           </Link>
@@ -415,6 +588,41 @@ export function RoomPage() {
               {showForm ? '✕ Close' : '+ Add Expense'}
             </button>
           )}
+          <div className="room-menu-wrap" ref={roomMenuRef}>
+            <button
+              type="button"
+              className={`btn btn-ghost room-menu-btn${roomMenuOpen ? ' open' : ''}`}
+              onClick={() => setRoomMenuOpen((open) => !open)}
+              aria-label="Room options"
+              aria-expanded={roomMenuOpen}
+              aria-haspopup="true"
+            >
+              <MdMoreVert />
+            </button>
+            {roomMenuOpen && (
+              <div className="room-menu-dropdown" role="menu">
+                <Link
+                  to={`/rooms/${roomId}/activity`}
+                  className="room-menu-item"
+                  role="menuitem"
+                  onClick={() => setRoomMenuOpen(false)}
+                >
+                  Activity log
+                </Link>
+                <button
+                  type="button"
+                  className="room-menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setRoomMenuOpen(false);
+                    openSettings();
+                  }}
+                >
+                  <MdOutlineSettings /> Manage room
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -450,7 +658,7 @@ export function RoomPage() {
         </div>
       </div>
 
-      {error && !showForm && !showLimitForm && !showSettleForm && !expenseToDelete && (
+      {error && !showForm && !showLimitForm && !showSettleForm && !showSettings && !expenseToDelete && !confirmRemoveMember && !confirmLeave && !confirmDeleteRoom && !confirmRename && !confirmTransferAdmin && (
         <div className="alert alert-error">{error}</div>
       )}
 
@@ -614,6 +822,185 @@ export function RoomPage() {
         </div>
       )}
 
+      {showSettings && (
+        <div className="expense-modal-backdrop" onClick={closeSettings} role="presentation">
+          <div className="expense-modal settings-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="expense-modal-header">
+              <div>
+                <h3>Room settings</h3>
+                <p className="expense-modal-hint">Manage members, rename the room, or leave.</p>
+              </div>
+              <button type="button" className="modal-close" onClick={closeSettings} aria-label="Close">✕</button>
+            </div>
+            {settingsError && <div className="alert alert-error">{settingsError}</div>}
+
+            {room.is_admin && (
+              <form onSubmit={handleRenameRoom} className="settings-section">
+                <h4>Rename room</h4>
+                <label>
+                  <span className="field-label">Room name</span>
+                  <input
+                    type="text"
+                    value={roomNameInput}
+                    onChange={(e) => setRoomNameInput(e.target.value)}
+                    required
+                    maxLength={255}
+                  />
+                </label>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={submitting}>
+                  Save name
+                </button>
+              </form>
+            )}
+
+            <div className="settings-section settings-danger">
+              <h4>Leave room</h4>
+              <p className="text-muted settings-hint">
+                {room.is_admin && members.length > 1
+                  ? 'Admin role will pass to the longest-standing member.'
+                  : members.length === 1
+                    ? 'You are the only member — the room will be deleted.'
+                    : 'You will no longer see this room or its expenses.'}
+              </p>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => { closeSettings(); setConfirmLeave(true); }}
+              >
+                Leave room
+              </button>
+            </div>
+
+            {room.is_admin && (
+              <div className="settings-section settings-danger">
+                <h4>Delete room</h4>
+                <p className="text-muted settings-hint">
+                  Permanently delete this room and all expenses for all members.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  onClick={() => { closeSettings(); setConfirmDeleteRoom(true); }}
+                >
+                  Delete room
+                </button>
+              </div>
+            )}
+
+            <button type="button" className="btn btn-ghost btn-full" onClick={closeSettings}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {confirmRemoveMember && pendingRemoveMember && (
+        <div className="expense-modal-backdrop" onClick={() => { setConfirmRemoveMember(false); setPendingRemoveMember(null); }} role="presentation">
+          <div className="expense-modal confirm-modal" role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-modal-icon">👤</div>
+            <h3>Remove roommate?</h3>
+            <p className="confirm-modal-text">
+              Remove <strong>{pendingRemoveMember.name}</strong> from this room?
+              Their past expenses will stay in history.
+            </p>
+            <div className="form-actions expense-modal-actions">
+              <button type="button" className="btn btn-danger btn-full" onClick={confirmRemoveMemberAction} disabled={submitting}>
+                {submitting ? 'Removing...' : 'Yes, remove'}
+              </button>
+              <button type="button" className="btn btn-secondary btn-full" onClick={() => { setConfirmRemoveMember(false); setPendingRemoveMember(null); }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmRename && (
+        <div className="expense-modal-backdrop" onClick={() => setConfirmRename(false)} role="presentation">
+          <div className="expense-modal confirm-modal" role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-modal-icon">✏️</div>
+            <h3>Rename room?</h3>
+            <p className="confirm-modal-text">
+              Rename this room from <strong>{room.name}</strong> to <strong>{roomNameInput.trim()}</strong>?
+            </p>
+            <div className="form-actions expense-modal-actions">
+              <button type="button" className="btn btn-primary btn-full" onClick={confirmRenameRoom} disabled={submitting}>
+                {submitting ? 'Saving...' : 'Yes, rename'}
+              </button>
+              <button type="button" className="btn btn-secondary btn-full" onClick={() => setConfirmRename(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmTransferAdmin && transferAdminTarget && (
+        <div className="expense-modal-backdrop" onClick={() => { setConfirmTransferAdmin(false); setTransferAdminTarget(null); }} role="presentation">
+          <div className="expense-modal confirm-modal" role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-modal-icon">👑</div>
+            <h3>Transfer admin?</h3>
+            <p className="confirm-modal-text">
+              Make <strong>{transferAdminTarget.name}</strong> the room admin?
+              You will no longer be able to rename the room, remove members, or delete the room.
+            </p>
+            <div className="form-actions expense-modal-actions">
+              <button type="button" className="btn btn-primary btn-full" onClick={confirmTransferAdminAction} disabled={submitting}>
+                {submitting ? 'Transferring...' : 'Yes, transfer admin'}
+              </button>
+              <button type="button" className="btn btn-secondary btn-full" onClick={() => { setConfirmTransferAdmin(false); setTransferAdminTarget(null); }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmLeave && (
+        <div className="expense-modal-backdrop" onClick={() => setConfirmLeave(false)} role="presentation">
+          <div className="expense-modal confirm-modal" role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-modal-icon">🚪</div>
+            <h3>Leave room?</h3>
+            <p className="confirm-modal-text">
+              Leave <strong>{room.name}</strong>?
+              {members.length === 1
+                ? ' This room will be deleted since you are the only member.'
+                : room.is_admin
+                  ? ' Admin will transfer to another member.'
+                  : ''}
+            </p>
+            <div className="form-actions expense-modal-actions">
+              <button type="button" className="btn btn-danger btn-full" onClick={confirmLeaveRoom} disabled={submitting}>
+                {submitting ? 'Leaving...' : 'Yes, leave'}
+              </button>
+              <button type="button" className="btn btn-secondary btn-full" onClick={() => setConfirmLeave(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDeleteRoom && (
+        <div className="expense-modal-backdrop" onClick={() => setConfirmDeleteRoom(false)} role="presentation">
+          <div className="expense-modal confirm-modal" role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-modal-icon">⚠️</div>
+            <h3>Delete room?</h3>
+            <p className="confirm-modal-text">
+              Permanently delete <strong>{room.name}</strong> and all expenses? This cannot be undone.
+            </p>
+            <div className="form-actions expense-modal-actions">
+              <button type="button" className="btn btn-danger btn-full" onClick={confirmDeleteRoomAction} disabled={submitting}>
+                {submitting ? 'Deleting...' : 'Yes, delete room'}
+              </button>
+              <button type="button" className="btn btn-secondary btn-full" onClick={() => setConfirmDeleteRoom(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showLimitForm && room.is_admin && (
         <div className="expense-modal-backdrop" onClick={closeLimitForm} role="presentation">
           <div className="expense-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -723,23 +1110,97 @@ export function RoomPage() {
         <section className="card">
           <h2>Roommates <span className="section-sub">({summary.monthLabel})</span></h2>
           <div className="member-list">
-            {members.map((member) => (
+            {members.map((member) => {
+              const payAmount =
+                member.id !== user?.id
+                  ? suggestedPayAmount(myBalance, member.balance)
+                  : null;
+              const canPayUpi = payAmount && member.upiId;
+
+              return (
               <div key={member.id} className="member-row">
                 <div className="member-info">
                   <span className="member-avatar">{member.name.charAt(0).toUpperCase()}</span>
                   <div>
-                    <strong>{member.name}{member.id === user?.id ? ' (you)' : ''}</strong>
+                    <strong>
+                      {member.name}
+                      {member.id === user?.id ? ' (you)' : ''}
+                      {member.id === room.created_by && (
+                        <span className="admin-badge">Admin</span>
+                      )}
+                    </strong>
                     <span className="text-muted">
                       Paid {formatCurrency(member.totalPaid)}
                       {(member.settledPaid ?? 0) > 0 && ` · Settled ${formatCurrency(member.settledPaid!)}`}
+                      {member.upiId && member.id !== user?.id && ` · UPI set`}
                     </span>
                   </div>
                 </div>
-                <span className={`balance-badge ${member.balance >= 0 ? 'positive' : 'negative'}`}>
-                  {member.balance >= 0 ? '+' : ''}{formatCurrency(member.balance)}
-                </span>
+                <div className="member-actions">
+                  <span className={`balance-badge ${member.balance >= 0 ? 'positive' : 'negative'}`}>
+                    {member.balance >= 0 ? '+' : ''}{formatCurrency(member.balance)}
+                  </span>
+                  {canPayUpi && (
+                    <a
+                      href={buildUpiPaymentLink({
+                        upiId: member.upiId!,
+                        payeeName: member.name,
+                        amount: payAmount,
+                        note: `${room.name} - RoomSplit`,
+                      })}
+                      className="btn btn-primary btn-sm upi-pay-btn"
+                    >
+                      Pay ₹{payAmount}
+                    </a>
+                  )}
+                  {room.is_admin && member.id !== user?.id && (
+                    <div className="member-menu-wrap">
+                      <button
+                        type="button"
+                        className={`btn btn-ghost member-menu-btn${openMemberMenuId === member.id ? ' open' : ''}`}
+                        onClick={() =>
+                          setOpenMemberMenuId((current) =>
+                            current === member.id ? null : member.id
+                          )
+                        }
+                        aria-label={`Options for ${member.name}`}
+                        aria-expanded={openMemberMenuId === member.id}
+                        aria-haspopup="true"
+                      >
+                        <MdMoreVert />
+                      </button>
+                      {openMemberMenuId === member.id && (
+                        <div className="room-menu-dropdown member-menu-dropdown" role="menu">
+                          <button
+                            type="button"
+                            className="room-menu-item"
+                            role="menuitem"
+                            onClick={() => {
+                              setOpenMemberMenuId(null);
+                              requestTransferAdmin(member);
+                            }}
+                          >
+                            Transfer admin
+                          </button>
+                          <button
+                            type="button"
+                            className="room-menu-item room-menu-item-danger"
+                            role="menuitem"
+                            onClick={() => {
+                              setOpenMemberMenuId(null);
+                              requestRemoveMember(member);
+                            }}
+                          >
+                            Remove member
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </section>
 
@@ -787,7 +1248,7 @@ export function RoomPage() {
                     className={`expense-tab${expenseFilter === member.id ? ' active' : ''}`}
                     onClick={() => setExpenseFilter(member.id)}
                   >
-                    {member.name.split(' ')[0]}
+                    {member.id === user?.id ? 'You' : member.name.split(' ')[0]}
                     <span className="tab-count">{expenseCountByMember(member.id)}</span>
                   </button>
                 ))}

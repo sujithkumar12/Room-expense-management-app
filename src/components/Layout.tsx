@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { ThemeToggle } from './ThemeToggle';
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { showToast } = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -39,13 +41,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener('keydown', handleEscape);
   }, [menuOpen, showLogoutConfirm]);
 
-  useEffect(() => {
-    if (!showLogoutConfirm) return;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [showLogoutConfirm]);
+  useBodyScrollLock(showLogoutConfirm);
 
   const handleLogoutClick = () => {
     setMenuOpen(false);
@@ -95,6 +91,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <button
                   type="button"
                   className="profile-menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    navigate('/profile');
+                  }}
+                >
+                  Profile & UPI
+                </button>
+                <button
+                  type="button"
+                  className="profile-menu-item profile-menu-item-danger"
                   role="menuitem"
                   onClick={handleLogoutClick}
                 >
