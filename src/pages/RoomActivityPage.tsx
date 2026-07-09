@@ -45,6 +45,10 @@ function activityIcon(type: string) {
       return '✏️';
     case 'admin_transferred':
       return '👑';
+    case 'payment_confirmed':
+      return '✅';
+    case 'payment_rejected':
+      return '❌';
     default:
       return '📌';
   }

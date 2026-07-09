@@ -9,6 +9,8 @@ import { handleExpenses } from './handlers/expenses.js';
 import { handleHealth } from './handlers/health.js';
 import { handleRoomById } from './handlers/rooms-id.js';
 import { handleRoomLeave, handleRemoveMember } from './handlers/rooms-members.js';
+import { handlePaymentRequestById } from './handlers/payment-requests-id.js';
+import { handlePaymentRequests } from './handlers/payment-requests.js';
 import { handleProfile } from './handlers/profile.js';
 import { handleProfileChangePassword } from './handlers/profile-change-password.js';
 import { handleRoomActivity } from './handlers/rooms-activity.js';
@@ -112,6 +114,15 @@ export async function routeRequest(
   if (segment0 === 'settlements' && segment1 && path.length === 2) {
     req.query.id = segment1;
     return handleSettlementById(req, res);
+  }
+
+  if (segment0 === 'payment-requests' && path.length === 1) {
+    return handlePaymentRequests(req, res);
+  }
+
+  if (segment0 === 'payment-requests' && segment1 && path.length === 2) {
+    req.query.id = segment1;
+    return handlePaymentRequestById(req, res);
   }
 
   return json(res, 404, { error: 'Not found' });

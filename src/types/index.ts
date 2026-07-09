@@ -50,6 +50,21 @@ export interface Settlement {
   payee_name: string;
 }
 
+export type PaymentRequestStatus = 'pending' | 'confirmed' | 'rejected' | 'cancelled';
+
+export interface PaymentRequest {
+  id: number;
+  amount: number;
+  status: PaymentRequestStatus;
+  created_at: string;
+  settlement_year: number;
+  settlement_month: number;
+  payer_id: number;
+  payer_name: string;
+  payee_id: number;
+  payee_name: string;
+}
+
 export interface RoomSummary {
   monthlyExpense: number;
   previousMonthExpense: number;

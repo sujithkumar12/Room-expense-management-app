@@ -203,6 +203,7 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
       settlementsResult,
       settlementTotalsResult,
       prevMonthResult,
+      paymentRequestsResult,
     ] = await Promise.all([
       query<{
         id: number;
@@ -292,6 +293,22 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
            AND EXTRACT(MONTH FROM expense_date) = $3`,
         [roomId, prev.year, prev.month]
       ),
+      query(
+        `SELECT pr.id, pr.amount::float AS amount, pr.status, pr.created_at,
+                pr.settlement_year, pr.settlement_month,
+                payer.id AS payer_id, payer.name AS payer_name,
+                payee.id AS payee_id, payee.name AS payee_name
+         FROM payment_requests pr
+         INNER JOIN users payer ON payer.id = pr.payer_id
+         INNER JOIN users payee ON payee.id = pr.payee_id
+         WHERE pr.room_id = $1
+           AND pr.settlement_year = $2
+           AND pr.settlement_month = $3
+           AND pr.status = 'pending'
+           AND (pr.payer_id = $4 OR pr.payee_id = $4)
+         ORDER BY pr.created_at DESC`,
+        [roomId, year, month, authUser.userId]
+      ),
     ]);
 
     const memberCount = membersResult.rows.length;
@@ -356,6 +373,7 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
       members,
       expenses: expensesResult.rows,
       settlements: settlementsResult.rows,
+      paymentRequests: paymentRequestsResult.rows,
       availableMonths,
       summary: {
         monthlyExpense,

@@ -1,4 +1,4 @@
-import type { Room, Member, Expense, RoomSummary, DashboardData, MonthOption, Settlement, User, RoomActivity } from '../types';
+import type { Room, Member, Expense, RoomSummary, DashboardData, MonthOption, Settlement, PaymentRequest, User, RoomActivity } from '../types';
 
 const TOKEN_KEY = 'roomsplit_token';
 const USER_KEY = 'roomsplit_user';
@@ -116,6 +116,7 @@ export const api = {
       members: Member[];
       expenses: Expense[];
       settlements: Settlement[];
+      paymentRequests: PaymentRequest[];
       summary: RoomSummary;
       availableMonths: MonthOption[];
     }>(`/rooms/${id}${qs ? `?${qs}` : ''}`);
@@ -211,6 +212,29 @@ export const api = {
 
   deleteSettlement: (settlementId: number) =>
     request<{ success: boolean }>(`/settlements/${settlementId}`, {
+      method: 'DELETE',
+    }),
+
+  createPaymentRequest: (body: {
+    roomId: number;
+    payeeId: number;
+    amount: number;
+    year: number;
+    month: number;
+  }) =>
+    request<{ paymentRequest: PaymentRequest }>('/payment-requests', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  respondPaymentRequest: (requestId: number, action: 'confirm' | 'reject') =>
+    request<{ success: boolean; status: string }>(`/payment-requests/${requestId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action }),
+    }),
+
+  cancelPaymentRequest: (requestId: number) =>
+    request<{ success: boolean }>(`/payment-requests/${requestId}`, {
       method: 'DELETE',
     }),
 

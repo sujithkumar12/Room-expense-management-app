@@ -1962,6 +1962,29 @@ select:focus {
   font-size: 0.9375rem;
 }
 
+.pending-pay-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--info-text);
+  background: var(--info-bg);
+  padding: 0.25rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.payment-pending-card {
+  margin-bottom: 1.5rem;
+}
+
+.payment-pending-card h2 {
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.payment-confirm-modal .confirm-modal-text strong {
+  color: var(--text);
+}
+
 /* Toast notifications */
 .toast-container {
   position: fixed;
