@@ -7,7 +7,7 @@ import { useToast } from '../context/ToastContext';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import type { Expense, ExpenseSort, Member, MonthOption, PaymentRequest, Room, RoomSummary, Settlement } from '../types';
 import { buildUpiPaymentLink, suggestedPayAmount } from '../utils/upi';
-import { MdDeleteOutline, MdMoreVert, MdOutlineContentCopy, MdOutlineModeEdit, MdOutlinePayments, MdOutlineSettings } from 'react-icons/md';
+import { MdDeleteOutline, MdMoreVert, MdOutlineContentCopy, MdOutlineModeEdit, MdOutlineSettings } from 'react-icons/md';
 import { LuLayoutDashboard } from 'react-icons/lu';
 
 function formatCurrency(amount: number) {
@@ -254,13 +254,13 @@ export function RoomPage() {
     setSettleNote('');
   };
 
-  const openSettleForm = () => {
-    setSettleError('');
-    setSettleAmount('');
-    setSettlePayeeId('');
-    setSettleNote('');
-    setShowSettleForm(true);
-  };
+  // const openSettleForm = () => {
+  //   setSettleError('');
+  //   setSettleAmount('');
+  //   setSettlePayeeId('');
+  //   setSettleNote('');
+  //   setShowSettleForm(true);
+  // };
 
   const openLimitForm = () => {
     setLimitError('');
