@@ -30,7 +30,7 @@ export async function handleDashboardMonthly(req: VercelRequest, res: VercelResp
     }
 
     const memberCheck = await query(
-      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2 AND left_at IS NULL',
       [roomId, authUser.userId]
     );
 

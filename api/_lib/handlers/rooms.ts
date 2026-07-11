@@ -10,9 +10,9 @@ export async function handleRooms(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'GET') {
       const result = await query(
         `SELECT r.id, r.name, r.invite_code, r.created_at,
-                (SELECT COUNT(*)::int FROM room_members rm WHERE rm.room_id = r.id) AS member_count
+                (SELECT COUNT(*)::int FROM room_members rm WHERE rm.room_id = r.id AND rm.left_at IS NULL) AS member_count
          FROM rooms r
-         INNER JOIN room_members rm ON rm.room_id = r.id
+         INNER JOIN room_members rm ON rm.room_id = r.id AND rm.left_at IS NULL
          WHERE rm.user_id = $1
          ORDER BY r.created_at DESC`,
         [authUser.userId]

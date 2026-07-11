@@ -32,7 +32,8 @@ export async function handleRoomsJoin(req: VercelRequest, res: VercelResponse) {
     await query(
       `INSERT INTO room_members (room_id, user_id)
        VALUES ($1, $2)
-       ON CONFLICT DO NOTHING`,
+       ON CONFLICT (room_id, user_id)
+       DO UPDATE SET left_at = NULL, joined_at = NOW()`,
       [room.id, authUser.userId]
     );
 

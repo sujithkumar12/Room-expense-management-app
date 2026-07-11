@@ -31,6 +31,87 @@ function previousPeriod(year: number, month: number) {
   return { year, month: month - 1 };
 }
 
+const ROOM_TIMEZONE = 'Asia/Kolkata';
+
+function monthBounds(year: number, month: number) {
+  const start = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const end = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+  return { start, end };
+}
+
+function toRoomDate(value: string | Date | null | undefined): string {
+  if (value == null) return '';
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    const date = trimmed.includes('T')
+      ? new Date(trimmed)
+      : new Date(`${trimmed.slice(0, 10)}T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) return trimmed.slice(0, 10);
+    return date.toLocaleDateString('en-CA', { timeZone: ROOM_TIMEZONE });
+  }
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return '';
+    return value.toLocaleDateString('en-CA', { timeZone: ROOM_TIMEZONE });
+  }
+  return String(value).slice(0, 10);
+}
+
+function isEligibleForExpense(
+  joinedAt: string | Date,
+  leftAt: string | Date | null,
+  expenseDate: string | Date
+): boolean {
+  const joined = toRoomDate(joinedAt);
+  const expense = toRoomDate(expenseDate);
+
+  // Joined on or before the expense date — same-day joiners share that day's expenses.
+  if (joined > expense) return false;
+
+  // Still in the room on the expense date.
+  if (leftAt && toRoomDate(leftAt) < expense) return false;
+
+  return true;
+}
+
+function wasActiveDuringMonth(
+  joinedAt: string | Date,
+  leftAt: string | Date | null,
+  year: number,
+  month: number
+): boolean {
+  const { start, end } = monthBounds(year, month);
+  if (toRoomDate(joinedAt) > end) return false;
+  if (leftAt && toRoomDate(leftAt) < start) return false;
+  return true;
+}
+
+function computeOwedShares(
+  expenses: { amount: number; expense_date: string | Date }[],
+  memberships: {
+    user_id: number;
+    joined_at: string | Date;
+    left_at: string | Date | null;
+  }[]
+): Map<number, number> {
+  const owed = new Map<number, number>();
+
+  for (const expense of expenses) {
+    const eligible = memberships.filter((member) =>
+      isEligibleForExpense(member.joined_at, member.left_at, expense.expense_date)
+    );
+    if (eligible.length === 0) continue;
+
+    const share = expense.amount / eligible.length;
+    for (const member of eligible) {
+      owed.set(member.user_id, (owed.get(member.user_id) ?? 0) + share);
+    }
+  }
+
+  return owed;
+}
+
 async function getRoomAccess(roomId: number, userId: number) {
   return query<{
     id: number;
@@ -43,7 +124,7 @@ async function getRoomAccess(roomId: number, userId: number) {
     `SELECT r.id, r.name, r.invite_code, r.created_at, r.created_by,
             r.weekly_limit::float AS weekly_limit
      FROM rooms r
-     INNER JOIN room_members rm ON rm.room_id = r.id AND rm.user_id = $2
+     INNER JOIN room_members rm ON rm.room_id = r.id AND rm.user_id = $2 AND rm.left_at IS NULL
      WHERE r.id = $1`,
     [roomId, userId]
   );
@@ -105,7 +186,7 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
           return json(res, 400, { error: 'You are already the admin' });
         }
         const memberCheck = await query(
-          'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+          'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2 AND left_at IS NULL',
           [roomId, newAdminId]
         );
         if (memberCheck.rows.length === 0) {
@@ -195,8 +276,12 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
     const isCurrentMonth =
       year === now.getFullYear() && month === now.getMonth() + 1;
 
+    const { start: monthStart, end: monthEnd } = monthBounds(year, month);
+
     const [
-      membersResult,
+      membershipsResult,
+      monthUsersResult,
+      paidByUserResult,
       expensesResult,
       weeklyResult,
       historyResult,
@@ -206,22 +291,58 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
       paymentRequestsResult,
     ] = await Promise.all([
       query<{
+        user_id: number;
+        joined_at: string;
+        left_at: string | null;
+      }>(
+        `SELECT user_id, joined_at, left_at
+         FROM room_members
+         WHERE room_id = $1`,
+        [roomId]
+      ),
+      query<{
         id: number;
         name: string;
         email: string;
         upi_id: string | null;
-        total_paid: number;
       }>(
-        `SELECT u.id, u.name, u.email, u.upi_id,
-                COALESCE(SUM(e.amount), 0)::float AS total_paid
-         FROM room_members rm
-         INNER JOIN users u ON u.id = rm.user_id
-         LEFT JOIN expenses e ON e.user_id = u.id AND e.room_id = $1
+        `SELECT DISTINCT u.id, u.name, u.email, u.upi_id
+         FROM users u
+         WHERE u.id IN (
+           SELECT rm.user_id
+           FROM room_members rm
+           WHERE rm.room_id = $1
+             AND (rm.joined_at AT TIME ZONE 'Asia/Kolkata')::date <= $4::date
+             AND (rm.left_at IS NULL OR (rm.left_at AT TIME ZONE 'Asia/Kolkata')::date >= $3::date)
+           UNION
+           SELECT e.user_id
+           FROM expenses e
+           WHERE e.room_id = $1
+             AND EXTRACT(YEAR FROM e.expense_date) = $2
+             AND EXTRACT(MONTH FROM e.expense_date) = $5
+           UNION
+           SELECT s.payer_id
+           FROM settlements s
+           WHERE s.room_id = $1
+             AND s.settlement_year = $2
+             AND s.settlement_month = $5
+           UNION
+           SELECT s.payee_id
+           FROM settlements s
+           WHERE s.room_id = $1
+             AND s.settlement_year = $2
+             AND s.settlement_month = $5
+         )
+         ORDER BY u.name`,
+        [roomId, year, monthStart, monthEnd, month]
+      ),
+      query<{ user_id: number; total_paid: number }>(
+        `SELECT e.user_id, COALESCE(SUM(e.amount), 0)::float AS total_paid
+         FROM expenses e
+         WHERE e.room_id = $1
            AND EXTRACT(YEAR FROM e.expense_date) = $2
            AND EXTRACT(MONTH FROM e.expense_date) = $3
-         WHERE rm.room_id = $1
-         GROUP BY u.id, u.name, u.email, u.upi_id
-         ORDER BY u.name`,
+         GROUP BY e.user_id`,
         [roomId, year, month]
       ),
       query(
@@ -275,13 +396,24 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
         `SELECT u.id AS user_id,
                 COALESCE(SUM(CASE WHEN s.payer_id = u.id THEN s.amount ELSE 0 END), 0)::float AS paid_out,
                 COALESCE(SUM(CASE WHEN s.payee_id = u.id THEN s.amount ELSE 0 END), 0)::float AS received_in
-         FROM room_members rm
-         INNER JOIN users u ON u.id = rm.user_id
-         LEFT JOIN settlements s ON s.room_id = rm.room_id
+         FROM (
+           SELECT payer_id AS user_id
+           FROM settlements
+           WHERE room_id = $1
+             AND settlement_year = $2
+             AND settlement_month = $3
+           UNION
+           SELECT payee_id AS user_id
+           FROM settlements
+           WHERE room_id = $1
+             AND settlement_year = $2
+             AND settlement_month = $3
+         ) settlement_users
+         INNER JOIN users u ON u.id = settlement_users.user_id
+         LEFT JOIN settlements s ON s.room_id = $1
            AND s.settlement_year = $2
            AND s.settlement_month = $3
            AND (s.payer_id = u.id OR s.payee_id = u.id)
-         WHERE rm.room_id = $1
          GROUP BY u.id`,
         [roomId, year, month]
       ),
@@ -311,12 +443,24 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
       ),
     ]);
 
-    const memberCount = membersResult.rows.length;
-    const monthlyExpense = membersResult.rows.reduce(
-      (sum, row) => sum + row.total_paid,
-      0
+    const memberships = membershipsResult.rows;
+    const monthExpenses = expensesResult.rows.map((row) => ({
+      amount: Number(row.amount),
+      expense_date: row.expense_date,
+    }));
+    const owedShareMap = computeOwedShares(monthExpenses, memberships);
+    const paidMap = new Map(
+      paidByUserResult.rows.map((row) => [row.user_id, row.total_paid])
     );
-    const equalShare = memberCount > 0 ? monthlyExpense / memberCount : 0;
+
+    const monthlyExpense = monthExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    const memberCount = monthUsersResult.rows.length;
+    const owedShares = monthUsersResult.rows.map((row) => owedShareMap.get(row.id) ?? 0);
+    const equalShare =
+      memberCount > 0
+        ? owedShares.reduce((sum, share) => sum + share, 0) / memberCount
+        : 0;
+    const yourShare = owedShareMap.get(authUser.userId) ?? 0;
     const weeklyExpense = weeklyResult.rows[0]?.total ?? 0;
     const previousMonthExpense = prevMonthResult.rows[0]?.total ?? 0;
 
@@ -327,21 +471,31 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
       ])
     );
 
-    const members = membersResult.rows.map((row) => {
-      const expenseBalance = row.total_paid - equalShare;
+    const members = monthUsersResult.rows.map((row) => {
+      const totalPaid = paidMap.get(row.id) ?? 0;
+      const owedShare = owedShareMap.get(row.id) ?? 0;
+      const expenseBalance = totalPaid - owedShare;
       const settlements = settlementMap.get(row.id) ?? { paidOut: 0, receivedIn: 0 };
       const balance =
         expenseBalance + settlements.paidOut - settlements.receivedIn;
+      const membership = memberships.find((m) => m.user_id === row.id);
+      const isActive =
+        membership &&
+        !membership.left_at &&
+        wasActiveDuringMonth(membership.joined_at, membership.left_at, year, month);
       return {
         id: row.id,
         name: row.name,
         email: row.email,
         upiId: row.upi_id,
-        totalPaid: row.total_paid,
+        joinedAt: membership ? toRoomDate(membership.joined_at) : null,
+        totalPaid,
+        owedShare,
         balance,
         expenseBalance,
         settledPaid: settlements.paidOut,
         settledReceived: settlements.receivedIn,
+        isActive: Boolean(isActive),
       };
     });
 
@@ -383,6 +537,7 @@ export async function handleRoomById(req: VercelRequest, res: VercelResponse) {
         weeklyLimit: room.weekly_limit,
         memberCount,
         equalShare,
+        yourShare,
         monthLabel: monthLabel(year, month),
         previousMonthLabel: monthLabel(prev.year, prev.month),
         selectedYear: year,

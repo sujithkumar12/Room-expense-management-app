@@ -22,11 +22,14 @@ export interface Member {
   name: string;
   email: string;
   upiId?: string | null;
+  joinedAt?: string | null;
   totalPaid: number;
+  owedShare?: number;
   balance: number;
   expenseBalance?: number;
   settledPaid?: number;
   settledReceived?: number;
+  isActive?: boolean;
 }
 
 export interface Expense {
@@ -73,6 +76,7 @@ export interface RoomSummary {
   weeklyLimit: number | null;
   memberCount: number;
   equalShare: number;
+  yourShare: number;
   monthLabel: string;
   previousMonthLabel: string;
   selectedYear: number;

@@ -27,14 +27,14 @@ export function generateInviteCode(): string {
   return code;
 }
 
+export const ACTIVE_MEMBER_SQL =
+  'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2 AND left_at IS NULL';
+
 export async function isRoomMember(
   roomId: number,
   userId: number,
   check: (query: string, params: unknown[]) => Promise<{ rows: unknown[] }>
 ): Promise<boolean> {
-  const result = await check(
-    'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
-    [roomId, userId]
-  );
+  const result = await check(ACTIVE_MEMBER_SQL, [roomId, userId]);
   return result.rows.length > 0;
 }

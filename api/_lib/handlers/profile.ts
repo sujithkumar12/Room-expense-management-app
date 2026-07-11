@@ -7,7 +7,7 @@ function normalizeUpiId(value: unknown): string | null {
   if (value === null || value === undefined || value === '') return null;
   const upi = String(value).trim().toLowerCase();
   if (!upi) return null;
-  if (!/^[a-z0-9._-]+@[a-z0-9]+$/.test(upi) && !/^\d{10}$/.test(upi)) {
+  if (!/^[a-z0-9._-]+@[a-z0-9]+$/.test(upi)) {
     return null;
   }
   return upi;
@@ -64,7 +64,7 @@ export async function handleProfile(req: VercelRequest, res: VercelResponse) {
         const normalized = upiId === null || upiId === '' ? null : normalizeUpiId(upiId);
         if (upiId && !normalized) {
           return json(res, 400, {
-            error: 'Enter a valid UPI ID (e.g. name@upi or 10-digit mobile number)',
+            error: 'Enter a valid UPI ID (e.g. yourname@upi or yourname@okaxis)',
           });
         }
         updates.push(`upi_id = $${index++}`);

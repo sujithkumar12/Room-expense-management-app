@@ -133,6 +133,7 @@ try {
     )`,
     'CREATE INDEX IF NOT EXISTS idx_payment_requests_room_period ON payment_requests(room_id, settlement_year, settlement_month)',
     'CREATE INDEX IF NOT EXISTS idx_payment_requests_payee_pending ON payment_requests(payee_id, status)',
+    'ALTER TABLE room_members ADD COLUMN IF NOT EXISTS left_at TIMESTAMPTZ',
   ];
 
   for (const statement of indexes) {

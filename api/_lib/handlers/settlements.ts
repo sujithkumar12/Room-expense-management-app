@@ -5,7 +5,7 @@ import { handleError, json } from '../utils.js';
 
 async function verifyMembership(roomId: number, userId: number) {
   const result = await query(
-    'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+    'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2 AND left_at IS NULL',
     [roomId, userId]
   );
   return result.rows.length > 0;
@@ -75,7 +75,7 @@ export async function handleSettlements(req: VercelRequest, res: VercelResponse)
       }
 
       const payeeCheck = await query(
-        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2 AND left_at IS NULL',
         [roomIdNum, payeeIdNum]
       );
       if (payeeCheck.rows.length === 0) {

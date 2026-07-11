@@ -133,11 +133,11 @@ export function ProfilePage() {
                 type="text"
                 value={upiId}
                 onChange={(e) => setUpiId(e.target.value)}
-                placeholder="yourname@upi or 9876543210"
+                placeholder="yourname@upi or yourname@okaxis"
                 autoComplete="off"
               />
               <span className="field-hint">
-                Roommates can pay you directly via UPI when you are owed money
+                Use your full UPI address (not just a phone number). Roommates can pay you when you are owed money.
               </span>
             </label>
 
