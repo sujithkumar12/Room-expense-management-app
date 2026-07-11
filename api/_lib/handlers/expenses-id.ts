@@ -25,7 +25,7 @@ export async function handleExpenseById(req: VercelRequest, res: VercelResponse)
     const expense = existing.rows[0];
 
     const memberCheck = await query(
-      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+      'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2 AND left_at IS NULL',
       [expense.room_id, authUser.userId]
     );
 

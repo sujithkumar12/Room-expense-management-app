@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS room_members (
   room_id INTEGER REFERENCES rooms(id) ON DELETE CASCADE,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   joined_at TIMESTAMPTZ DEFAULT NOW(),
+  left_at TIMESTAMPTZ,
   PRIMARY KEY (room_id, user_id)
 );
 

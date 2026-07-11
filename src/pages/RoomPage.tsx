@@ -7,7 +7,7 @@ import { useToast } from '../context/ToastContext';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import type { Expense, ExpenseSort, Member, MonthOption, PaymentRequest, Room, RoomSummary, Settlement } from '../types';
 import { formatCurrency } from '../utils/currency';
-import { buildUpiPaymentLinks, isIOSDevice, openPaymentLink, suggestedPayAmount } from '../utils/upi';
+import { buildUpiPaymentLinks, isIOSDevice, isValidUpiVpa, openPaymentLink, suggestedPayAmount } from '../utils/upi';
 import { MdDeleteOutline, MdMoreVert, MdOutlineContentCopy, MdOutlineModeEdit, MdOutlineSettings } from 'react-icons/md';
 import { LuLayoutDashboard } from 'react-icons/lu';
 
@@ -137,11 +137,11 @@ export function RoomPage() {
   useEffect(() => {
     if (
       expenseFilter !== 'all' &&
-      !expenses.some((e) => e.user_id === expenseFilter)
+      !members.some((member) => member.id === expenseFilter)
     ) {
       setExpenseFilter('all');
     }
-  }, [expenses, expenseFilter]);
+  }, [members, expenseFilter]);
 
   useEffect(() => {
     if (!roomMenuOpen) return;
@@ -394,9 +394,16 @@ export function RoomPage() {
       showToast('You already have a pending payment waiting for confirmation', 'info');
       return;
     }
+    if (!isValidUpiVpa(member.upiId)) {
+      showToast(
+        `${member.name} needs to set a full UPI ID (like name@upi) in Profile before you can pay.`,
+        'error'
+      );
+      return;
+    }
     setPaymentSubmitting(true);
     try {
-      await api.createPaymentRequest({
+      const { paymentRequest } = await api.createPaymentRequest({
         roomId,
         payeeId: member.id,
         amount,
@@ -407,7 +414,8 @@ export function RoomPage() {
         upiId: member.upiId!,
         payeeName: member.name,
         amount,
-        note: `${room.name} - RoomSplit`,
+        note: `RoomSplit ${room.name}`,
+        transactionRef: `RS${paymentRequest.id}`,
       });
       await loadRoom(selectedYear, selectedMonth, true);
       setUpiPayModal({ member, amount, links });
@@ -661,7 +669,7 @@ export function RoomPage() {
       .sort((a, b) => a.name.localeCompare(b.name));
     return me ? [me, ...others] : others;
   })();
-  const otherMembers = members.filter((m) => m.id !== user?.id);
+  const otherMembers = members.filter((m) => m.id !== user?.id && m.isActive !== false);
   const myMember = members.find((m) => m.id === user?.id);
   const myBalance = myMember?.balance ?? 0;
   const formDateBounds = editingExpense
@@ -833,10 +841,10 @@ export function RoomPage() {
         )}
 
         <div className="stat-card card">
-          <span className="stat-label">Equal Share</span>
-          <span className="stat-value accent">{formatCurrency(summary.equalShare)}</span>
+          <span className="stat-label">Your Share</span>
+          <span className="stat-value accent">{formatCurrency(summary.yourShare)}</span>
           <span className="stat-hint">
-            {summary.isCurrentMonth ? 'this month' : summary.monthLabel} · {summary.memberCount} roommate{summary.memberCount !== 1 ? 's' : ''}
+            {summary.isCurrentMonth ? 'this month' : summary.monthLabel} · split by join date
           </span>
         </div>
 
@@ -1375,7 +1383,7 @@ export function RoomPage() {
                 member.id !== user?.id
                   ? suggestedPayAmount(myBalance, member.balance)
                   : null;
-              const canPayUpi = payAmount && member.upiId;
+              const canPayUpi = payAmount && member.upiId && isValidUpiVpa(member.upiId);
 
               return (
               <div key={member.id} className="member-row">
@@ -1390,9 +1398,15 @@ export function RoomPage() {
                       )}
                     </strong>
                     <span className="text-muted">
+                      {member.joinedAt && `Joined ${formatDate(member.joinedAt)}`}
+                      {member.joinedAt && ' · '}
                       Paid {formatCurrency(member.totalPaid)}
+                      {(member.owedShare ?? 0) > 0 && ` · Share ${formatCurrency(member.owedShare!)}`}
                       {(member.settledPaid ?? 0) > 0 && ` · Settled ${formatCurrency(member.settledPaid!)}`}
-                      {member.upiId && member.id !== user?.id && ` · UPI set`}
+                      {member.isActive === false && ' · Left room'}
+                      {member.upiId && member.id !== user?.id && (
+                        isValidUpiVpa(member.upiId) ? ' · UPI set' : ' · UPI invalid'
+                      )}
                     </span>
                   </div>
                 </div>
@@ -1413,7 +1427,7 @@ export function RoomPage() {
                   {hasPendingPaymentTo(member.id) && (
                     <span className="pending-pay-badge">Awaiting confirm</span>
                   )}
-                  {room.is_admin && member.id !== user?.id && (
+                  {room.is_admin && member.id !== user?.id && member.isActive !== false && (
                     <div className="member-menu-wrap">
                       <button
                         type="button"
@@ -1523,7 +1537,13 @@ export function RoomPage() {
                 : `No expenses recorded for ${summary.monthLabel}.`}
             </p>
           ) : filteredExpenses.length === 0 ? (
-            <p className="text-muted empty-text">No expenses match your search or filter.</p>
+            <p className="text-muted empty-text">
+              {expenseFilter !== 'all'
+                ? `${tabMembers.find((member) => member.id === expenseFilter)?.name ?? 'This roommate'} has no expenses ${
+                    summary.isCurrentMonth ? 'this month' : `in ${summary.monthLabel}`
+                  }.`
+                : 'No expenses match your search or filter.'}
+            </p>
           ) : (
             <div className="expense-list">
               {filteredExpenses.map((expense) => (

@@ -16,7 +16,7 @@ async function getRoomWithMembership(roomId: number, userId: number) {
     `SELECT r.id, r.name, r.invite_code, r.created_at, r.created_by,
             r.weekly_limit::float AS weekly_limit
      FROM rooms r
-     INNER JOIN room_members rm ON rm.room_id = r.id AND rm.user_id = $2
+     INNER JOIN room_members rm ON rm.room_id = r.id AND rm.user_id = $2 AND rm.left_at IS NULL
      WHERE r.id = $1`,
     [roomId, userId]
   );
@@ -24,7 +24,7 @@ async function getRoomWithMembership(roomId: number, userId: number) {
 
 async function getMemberCount(roomId: number) {
   const result = await query<{ count: number }>(
-    'SELECT COUNT(*)::int AS count FROM room_members WHERE room_id = $1',
+    'SELECT COUNT(*)::int AS count FROM room_members WHERE room_id = $1 AND left_at IS NULL',
     [roomId]
   );
   return result.rows[0]?.count ?? 0;
@@ -63,7 +63,7 @@ export async function handleRoomLeave(req: VercelRequest, res: VercelResponse) {
     if (room.created_by === authUser.userId) {
       const nextAdmin = await query<{ user_id: number }>(
         `SELECT user_id FROM room_members
-         WHERE room_id = $1 AND user_id != $2
+         WHERE room_id = $1 AND user_id != $2 AND left_at IS NULL
          ORDER BY joined_at ASC
          LIMIT 1`,
         [roomId, authUser.userId]
@@ -78,7 +78,7 @@ export async function handleRoomLeave(req: VercelRequest, res: VercelResponse) {
     }
 
     await query(
-      'DELETE FROM room_members WHERE room_id = $1 AND user_id = $2',
+      'UPDATE room_members SET left_at = NOW() WHERE room_id = $1 AND user_id = $2 AND left_at IS NULL',
       [roomId, authUser.userId]
     );
 
@@ -126,7 +126,7 @@ export async function handleRemoveMember(req: VercelRequest, res: VercelResponse
     const targetMember = await query<{ name: string }>(
       `SELECT u.name FROM room_members rm
        INNER JOIN users u ON u.id = rm.user_id
-       WHERE rm.room_id = $1 AND rm.user_id = $2`,
+       WHERE rm.room_id = $1 AND rm.user_id = $2 AND rm.left_at IS NULL`,
       [roomId, memberId]
     );
 
@@ -139,7 +139,7 @@ export async function handleRemoveMember(req: VercelRequest, res: VercelResponse
     ]);
 
     await query(
-      'DELETE FROM room_members WHERE room_id = $1 AND user_id = $2',
+      'UPDATE room_members SET left_at = NOW() WHERE room_id = $1 AND user_id = $2 AND left_at IS NULL',
       [roomId, memberId]
     );
 

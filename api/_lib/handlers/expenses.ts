@@ -15,7 +15,7 @@ export async function handleExpenses(req: VercelRequest, res: VercelResponse) {
       }
 
       const memberCheck = await query(
-        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2',
+        'SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2 AND left_at IS NULL',
         [roomId, authUser.userId]
       );
 
@@ -53,7 +53,7 @@ export async function handleExpenses(req: VercelRequest, res: VercelResponse) {
         `INSERT INTO expenses (room_id, user_id, amount, purpose, expense_date)
          SELECT $1, $2, $3, $4, $5
          WHERE EXISTS (
-           SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2
+           SELECT 1 FROM room_members WHERE room_id = $1 AND user_id = $2 AND left_at IS NULL
          )
          RETURNING id, amount::float AS amount, purpose, expense_date, created_at`,
         [
