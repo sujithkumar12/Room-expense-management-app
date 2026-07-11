@@ -137,11 +137,11 @@ export function RoomPage() {
   useEffect(() => {
     if (
       expenseFilter !== 'all' &&
-      !expenses.some((e) => e.user_id === expenseFilter)
+      !members.some((member) => member.id === expenseFilter)
     ) {
       setExpenseFilter('all');
     }
-  }, [expenses, expenseFilter]);
+  }, [members, expenseFilter]);
 
   useEffect(() => {
     if (!roomMenuOpen) return;
@@ -1537,7 +1537,13 @@ export function RoomPage() {
                 : `No expenses recorded for ${summary.monthLabel}.`}
             </p>
           ) : filteredExpenses.length === 0 ? (
-            <p className="text-muted empty-text">No expenses match your search or filter.</p>
+            <p className="text-muted empty-text">
+              {expenseFilter !== 'all'
+                ? `${tabMembers.find((member) => member.id === expenseFilter)?.name ?? 'This roommate'} has no expenses ${
+                    summary.isCurrentMonth ? 'this month' : `in ${summary.monthLabel}`
+                  }.`
+                : 'No expenses match your search or filter.'}
+            </p>
           ) : (
             <div className="expense-list">
               {filteredExpenses.map((expense) => (
