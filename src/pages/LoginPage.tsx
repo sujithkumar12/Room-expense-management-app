@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export function LoginPage() {
   const { login } = useAuth();
+  const [searchParams] = useSearchParams();
+  const sessionExpired = searchParams.get('expired') === '1';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -31,6 +33,9 @@ export function LoginPage() {
           <p>Sign in to manage your room expenses</p>
         </div>
         <form onSubmit={handleSubmit} className="auth-form">
+          {sessionExpired && (
+            <div className="alert alert-info">Your session expired. Please sign in again.</div>
+          )}
           {error && <div className="alert alert-error">{error}</div>}
           <label>
             Email

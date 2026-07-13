@@ -27,6 +27,14 @@ export function clearAuth() {
   localStorage.removeItem(USER_KEY);
 }
 
+function handleSessionExpired() {
+  clearAuth();
+  const onLoginPage = window.location.pathname.startsWith('/login');
+  if (!onLoginPage) {
+    window.location.assign('/login?expired=1');
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers: Record<string, string> = {
@@ -61,6 +69,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) {
+    if (res.status === 401 && token && data.error === 'Unauthorized') {
+      handleSessionExpired();
+      throw new Error('Your session expired. Please sign in again.');
+    }
     throw new Error(data.error || data.message || 'Something went wrong');
   }
 
@@ -81,7 +93,12 @@ export const api = {
     ),
 
   forgotPassword: (email: string) =>
-    request<{ message: string }>('/auth/forgot-password', {
+    request<{
+      message: string;
+      emailSent?: boolean;
+      devNote?: string;
+      devResetUrl?: string;
+    }>('/auth/forgot-password', {
       method: 'POST',
       body: JSON.stringify({ email }),
     }),

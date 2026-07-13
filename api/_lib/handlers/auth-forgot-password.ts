@@ -5,9 +5,17 @@ import { handleError, json } from '../utils.js';
 
 const TOKEN_EXPIRY_HOURS = 1;
 
-async function sendResetEmail(email: string, resetUrl: string) {
+async function sendResetEmail(
+  email: string,
+  resetUrl: string
+): Promise<{ sent: boolean; error?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return false;
+  if (!apiKey) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[RoomSplit] RESEND_API_KEY is not set. Password reset link:', resetUrl);
+    }
+    return { sent: false, error: 'Email service not configured' };
+  }
 
   const from = process.env.RESEND_FROM || 'RoomSplit <onboarding@resend.dev>';
   const res = await fetch('https://api.resend.com/emails', {
@@ -28,7 +36,13 @@ async function sendResetEmail(email: string, resetUrl: string) {
     }),
   });
 
-  return res.ok;
+  if (!res.ok) {
+    const errorBody = await res.text();
+    console.error('[RoomSplit] Resend email failed:', res.status, errorBody);
+    return { sent: false, error: 'Failed to send reset email' };
+  }
+
+  return { sent: true };
 }
 
 export async function handleAuthForgotPassword(req: VercelRequest, res: VercelResponse) {
@@ -64,9 +78,23 @@ export async function handleAuthForgotPassword(req: VercelRequest, res: VercelRe
         process.env.APP_URL ||
         (req.headers.origin as string) ||
         (req.headers.referer as string)?.replace(/\/[^/]*$/, '') ||
-        'http://localhost:5173';
+        'http://localhost:3000';
       const resetUrl = `${origin.replace(/\/$/, '')}/reset-password?token=${rawToken}`;
-      await sendResetEmail(user.email, resetUrl);
+      const emailResult = await sendResetEmail(user.email, resetUrl);
+      const isDev = process.env.NODE_ENV !== 'production';
+
+      return json(res, 200, {
+        message:
+          'If an account exists with that email, a password reset link has been sent.',
+        emailSent: emailResult.sent,
+        ...(isDev && !emailResult.sent
+          ? {
+              devNote:
+                'Email was not sent. Add RESEND_API_KEY to .env.local, or use the dev reset link below / check the server terminal.',
+              devResetUrl: resetUrl,
+            }
+          : {}),
+      });
     }
 
     return json(res, 200, {

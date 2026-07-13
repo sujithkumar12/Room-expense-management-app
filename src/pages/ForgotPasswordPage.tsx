@@ -8,14 +8,20 @@ export function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [devResetUrl, setDevResetUrl] = useState('');
+  const [devNote, setDevNote] = useState('');
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setDevResetUrl('');
+    setDevNote('');
     try {
       const result = await api.forgotPassword(email);
       setSent(true);
-      showToast(result.message, 'info');
+      if (result.devNote) setDevNote(result.devNote);
+      if (result.devResetUrl) setDevResetUrl(result.devResetUrl);
+      showToast(result.message, result.emailSent === false ? 'info' : 'success');
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Request failed', 'error');
     } finally {
@@ -32,10 +38,23 @@ export function ForgotPasswordPage() {
           <p>Enter your email and we&apos;ll send a reset link</p>
         </div>
         {sent ? (
-          <div className="alert alert-info">
-            If an account exists with that email, a password reset link has been sent.
-            Check your inbox and spam folder.
-          </div>
+          <>
+            <div className="alert alert-info">
+              If an account exists with that email, a password reset link has been sent.
+              Check your inbox and spam folder.
+            </div>
+            {devNote && (
+              <div className="alert alert-error" style={{ marginTop: '0.75rem' }}>
+                {devNote}
+              </div>
+            )}
+            {devResetUrl && (
+              <p className="auth-footer" style={{ marginTop: '0.75rem', wordBreak: 'break-all' }}>
+                Dev reset link:{' '}
+                <a href={devResetUrl}>{devResetUrl}</a>
+              </p>
+            )}
+          </>
         ) : (
           <form onSubmit={handleSubmit} className="auth-form">
             <label>

@@ -1,6 +1,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useState,
   type ReactNode,
 } from 'react';
@@ -18,13 +19,28 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function readStoredUser(): User | null {
-  const stored = getStoredUser();
-  return stored && getToken() ? stored : null;
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(readStoredUser);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const token = getToken();
+    const stored = getStoredUser();
+
+    if (!token || !stored) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
+    api.getProfile()
+      .then(({ user: profile }) => setUser(profile))
+      .catch(() => {
+        clearAuth();
+        setUser(null);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const login = async (email: string, password: string) => {
     const { token, user: loggedInUser } = await api.login({ email, password });
@@ -56,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading: false, login, signup, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, login, signup, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
